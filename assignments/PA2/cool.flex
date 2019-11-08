@@ -11,6 +11,7 @@
 #include <cool-parse.h>
 #include <stringtab.h>
 #include <utilities.h>
+#include <sstream>      // for stringstream
 
 /* The compiler assumes these identifiers. */
 #define yylval cool_yylval
@@ -50,6 +51,7 @@ extern YYSTYPE cool_yylval;
  */
 
 DARROW          =>
+DIGIT           [0-9]
 
 %%
 
@@ -62,6 +64,16 @@ DARROW          =>
   *  The multiple-character operators.
   */
 {DARROW}		{ return (DARROW); }
+{DIGIT}+        { 
+    std::stringstream ss;
+    int num;
+    ss << yytext;
+    ss >> num;
+    cool_yylval.symbol = inttable.add_int(num);
+    return (INT_CONST); 
+    }
+class           { return (CLASS); }
+
 
  /*
   * Keywords are case-insensitive except for the values true and false,

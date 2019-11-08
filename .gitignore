@@ -3,6 +3,9 @@
 *.o
 *.d
 grading/
+.tags
+.gdb_history
 
 # PA1
 lexer
+cool-lex.cc

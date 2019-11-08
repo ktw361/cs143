@@ -1,2 +1,8 @@
 .vimrc
 *.s
+*.o
+*.d
+grading/
+
+# PA1
+lexer

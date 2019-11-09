@@ -11,7 +11,6 @@
 #include <cool-parse.h>
 #include <stringtab.h>
 #include <utilities.h>
-#include <sstream>      // for stringstream
 
 /* The compiler assumes these identifiers. */
 #define yylval cool_yylval
@@ -172,7 +171,7 @@ QUOTE           \"
     comment_level--;
     if (comment_level == 0)
         BEGIN(INITIAL);
-                }
+}
 {NEWLINE}         { curr_lineno++; }
 <<EOF>>         {
     cool_yylval.error_msg = "EOF in comment";
@@ -183,11 +182,14 @@ QUOTE           \"
         return 0;
     }
 }
-[^*\n]+         { 
+[^(*\n]+         { 
     // eat anything that is not * or \n
 }
 "*"             {
     // eat the lone star
+}
+"("             {
+    // eat the lone open parenthesis
 }
 }
 
@@ -202,6 +204,21 @@ QUOTE           \"
     BEGIN(INITIAL);
     cool_yylval.symbol = stringtable.add_string(string_buf_ptr, cur_str_size);
     return (STR_CONST);
+}
+.*\0[^\\"\n]*          {
+    cool_yylval.error_msg = "String contains null character";
+    BEGIN(STRING_ERR);
+    return (ERROR);
+}
+[^\\"\n]+ {
+    int textlen = strlen(yytext);
+    if (cur_str_size + textlen >= MAX_STR_CONST) {
+        cool_yylval.error_msg = "String constant too long";
+        BEGIN(STRING_ERR);
+        return (ERROR);
+    }
+    strcpy(string_buf_ptr + cur_str_size, yytext);
+    cur_str_size += textlen;
 }
 \\{WHITESPACE}*\n {
     // escaped new line
@@ -237,26 +254,11 @@ QUOTE           \"
     } else 
         return 0;
 }
-{NEWLINE} {
+{NEWLINE}   {
     cool_yylval.error_msg = "Unterminated string constant";
     curr_lineno++;
     BEGIN(INITIAL);  // assume programmer forget
     return (ERROR);
-}
-\0                      {
-    cool_yylval.error_msg = "String contains null character";
-    BEGIN(STRING_ERR);
-    /* return (ERROR); */
-}
-[^\\"\n]+    {
-    int textlen = strlen(yytext);
-    if (cur_str_size + textlen > MAX_STR_CONST) {
-        cool_yylval.error_msg = "String constant too long";
-        BEGIN(STRING_ERR);
-        return (ERROR);
-    }
-    strcpy(string_buf_ptr + cur_str_size, yytext);
-    cur_str_size += textlen;
 }
 }
 
@@ -353,24 +355,15 @@ QUOTE           \"
     return (OBJECTID);
 }
 
-
 {DIGIT}+        { 
-    std::stringstream ss;
-    int num;
-    ss << yytext;
-    ss >> num;
-    cool_yylval.symbol = inttable.add_int(num);
+    // Do not use add_int() .... useless ?? ( overflow?)
+    cool_yylval.symbol = inttable.add_string(yytext); 
     return (INT_CONST); 
-}
-
-{DIGIT}+{ALPHAUNDER}{VALIDCHAR}*        { 
-    strcpy(cool_yylval.error_msg, yytext);
-    return (ERROR);
 }
 
 .           {
     // Any other char is invalid
-    strcpy(cool_yylval.error_msg, yytext);
+    cool_yylval.error_msg = yytext;
     return (ERROR);
 }
 

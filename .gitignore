@@ -8,3 +8,6 @@ grading/
 # PA1
 lexer
 cool-lex.cc
+cgen
+parser
+semant

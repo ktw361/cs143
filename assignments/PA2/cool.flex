@@ -52,6 +52,9 @@ extern YYSTYPE cool_yylval;
 
 DARROW          =>
 DIGIT           [0-9]
+WHITESPACE      (" "|"\t")
+NEWLINE         "\n"
+CLASS           class
 
 %%
 
@@ -63,6 +66,7 @@ DIGIT           [0-9]
  /*
   *  The multiple-character operators.
   */
+{NEWLINE}       { curr_lineno++; return (LET_STMT); }
 {DARROW}		{ return (DARROW); }
 {DIGIT}+        { 
     std::stringstream ss;
@@ -72,7 +76,7 @@ DIGIT           [0-9]
     cool_yylval.symbol = inttable.add_int(num);
     return (INT_CONST); 
     }
-class           { return (CLASS); }
+CLASS           { return (CLASS); }
 
 
  /*

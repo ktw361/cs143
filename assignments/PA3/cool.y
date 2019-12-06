@@ -22,9 +22,9 @@ to whatever you want the line number
 for the tree node to be */
   
   
-  #define YYLLOC_DEFAULT(Current, Rhs, N)         \
-  Current = Rhs[1];                             \
-  node_lineno = Current;
+#define YYLLOC_DEFAULT(Current, Rhs, N)         \
+Current = Rhs[1];                             \
+node_lineno = Current;
 
 
 #define SET_NODELOC(Current)  \
@@ -135,7 +135,50 @@ documentation for details). */
 %type <class_> class
 
 /* You will want to change the following line. */
-%type <features> dummy_feature_list
+/* MyNote: %union { `Phylum` `constructor`} ; */
+/* then: %type `constructor` `non-terminal` */
+%type <features> feature_list
+%type <feature> feature
+%type <formals> formal_list
+%type <formal> formal
+%type <cases> case_list
+%type <case_> case
+%type <expressions> expression_list
+%type <expressions> expr_list
+%type <expression> expression
+
+%type method
+%type attr
+
+/* expresion_list is for  [[expr;]]+ , where expression == expr ; */
+%type expr
+/* expr_list is for   [ expr [[, expr]]* ]  */
+%type expr_list
+/* now is expr... */
+%type assign
+%type static_dispatch
+%type dispatch
+%type conda
+%type loop
+%type typcase
+%type block
+/* %type let       /1* nested let *1/ */
+/* %type let_body */  
+%type plus
+%type sub
+%type mul
+%type divide
+%type neg
+%type lt
+%type eq
+%type leq
+%type comp
+%type object   /* for ID */
+%type int_const
+%type string_const
+%type new
+%type isvoid
+%type bool_const
 
 /* Precedence declarations go here. */
 
@@ -144,29 +187,279 @@ documentation for details). */
 /* 
 Save the root of the abstract syntax tree in a global variable.
 */
-program	: class_list	{ @$ = @1; ast_root = program($1); }
+program	
+: class_list	{ @$ = @1; ast_root = program($1); }
 ;
 
 class_list
 : class			/* single class */
-{ $$ = single_Classes($1);
-parse_results = $$; }
+{ $$ = single_Classes($1); parse_results = $$; }
+
 | class_list class	/* several classes */
-{ $$ = append_Classes($1,single_Classes($2)); 
-parse_results = $$; }
+{ $$ = append_Classes($1, single_Classes($2));  
+    parse_results = $$; }
 ;
 
 /* If no parent is specified, the class inherits from the Object class. */
-class	: CLASS TYPEID '{' dummy_feature_list '}' ';'
-{ $$ = class_($2,idtable.add_string("Object"),$4,
-stringtable.add_string(curr_filename)); }
-| CLASS TYPEID INHERITS TYPEID '{' dummy_feature_list '}' ';'
-{ $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
+class	
+: CLASS TYPEID '{' feature_list '}' ';'
+{ $$ = class_($2, idtable.add_string("Object"), $4,
+    stringtable.add_string(curr_filename)); }
+
+| CLASS TYPEID INHERITS TYPEID '{' feature_list '}' ';'
+{ $$ = class_($2, $4, $6, stringtable.add_string(curr_filename)); }
 ;
 
 /* Feature list may be empty, but no empty features in list. */
-dummy_feature_list:		/* empty */
-{  $$ = nil_Features(); }
+feature_list
+: feature			/* single class */
+{ $$ = single_Features($1); }
+
+| feature_list class	/* several classes */
+{ $$ = append_Features($1, single_Features($2)); }
+
+| %empty        /* empty feature list */
+{ $$ = nil_Features(); }
+
+;
+
+feature
+: method ';'
+{ $$ = $1; }
+
+| attr ';'
+{ $$ = $1; }
+;
+
+method
+: OBJECTID '(' formals ')' ':' TYPEID '{' expressions '}'  /* methods */
+{ $$ = method($1, $3, $6, $8); }
+;
+
+attr
+: OBJECTID ':' TYPEID  /* attrs, no init */ 
+{ $$ = attr($1, $3, no_expr()); }
+
+| OBJECTID ':' TYPEID ASSIGN expression /* attrs */ 
+{ $$ = attr($1, $3, $5); }
+;
+
+formal_list
+: formal			        /* single formals */
+{ $$ = single_Formals($1); }
+
+| formal_list ',' formal	/* several formals */
+{ $$ = append_Formals($1, single_Formals($2)); }
+;
+
+formal
+: OBJECTID ':' TYPEID
+{ $$ = formal($1, $3); }
+;
+
+case_list
+: case              /* single case */
+{ $$ = single_Cases($1); }
+
+| case_list case
+{ $$ = append_Cases($1, single_Cases($2)); }
+;
+
+case
+: OBJECTID ':' TYPEID DARROW expression ';'
+{ $$ = branch($1, $3, $5); }
+;
+
+expression_list     /* expresion_list only means:  { [[expr;]]+ }  */
+: expression
+{ $$ = single_Expressions($1); }
+
+| expression_list expression
+{ $$ = append_Expressions($1, single_Expressions($2)); }
+;
+
+expression
+: expr ';'
+{ $$ = $1 }
+;
+
+expr_list
+: expr 
+{ $$ = single_Expressions($1); }
+
+| expr_list ',' expr
+{ $$ = append_Expressions($1, $3); }
+;
+
+expr 
+: assign
+| static_dispatch
+| dispatch
+| cond
+| loop
+| block
+| let
+| typcase
+| new
+| isvoid
+| plus
+| sub
+| divide
+| neg
+| lt
+| eq
+| leq
+| comp
+| '(' expr ')'
+    { $$ = $1; }
+| object
+| int_const
+| string_const
+| bool_const
+;
+
+assign
+: OBJECTID ASSIGN expr
+{ $$ = assign($1, $3); }
+;
+
+static_dispatch
+: expr '@' TYPEID '.' OBJECTID '(' ')'
+{ $$ = static_dispatch($1, $3, $5, nil_Expressions()); }
+
+| expr '@' TYPEID '.' OBJECTID '(' expr_list ')'
+{ $$ = static_dispatch($1, $3, $5, $7); }
+;
+
+dispatch
+: expr '.' OBJECTID '(' expr_list ')'
+{ $$ = dispatch($1, $3, $5); }
+
+| expr '.' OBJECTID '(' ')'
+{ $$ = dispatch($1, $3, nil_Expressions(); }
+
+| OBJECTID '(' expr_list ')' 
+{ $$ = dispatch(
+    object(stringtable.add_string("self")), $1, $3); }
+
+| OBJECTID '(' ')' 
+{ $$ = dispatch(
+    object(stringtable.add_string("self")), $1, nil_Expressions()); }
+;
+
+cond
+: IF expr THEN expr ELSE expr FI
+{ $$ = cond($2, $4, $6); }
+;
+
+loop
+: WHILE expr LOOP expr POOL
+{ $$ = loop($2, $4); }
+;
+
+typcase
+: CASE expr OF case_list ESAC
+{ $$ = typcase($2, $4); }
+;
+
+block
+: '{' expression_list '}'
+{ $$ = block($2); }
+;
+
+/* let */
+/* : LET OBJECTID ':' TYPEID IN let */
+/* { $$ = */ 
+
+/* | LET OBJECTID ':' TYPEID DARROW expr IN let */
+
+/* ; */
+
+/* let */
+/* : LET OBJECTID ':' TYPEID IN expr */
+/* { $$ = let($2, $4, no_expr, $86; } */
+
+/* | LET OBJECTID ':' TYPEID DARROW expr IN expr */
+/* { $$ = let($2, $4, $6, $8); } */
+
+/* | LET OBJECTID ':' TYPEID DARROW expr let_ext IN expr */
+/* { $$ = let($2, $4, $6, let(let_ext, ); } */
+/* ; */
+
+new
+: NEW TYPEID
+{ $$ = new_($2); }
+;
+
+isvoid
+: ISVOID expr
+{ $$ = isvoid($2); }
+;
+
+plus
+: expr '+' expr
+{ $$ = plus($1, $3); }
+;
+
+sub
+: expr '-' expr
+{ $$ = sub($1, $3); }
+;
+
+mul
+: expr '*' expr 
+{ $$ = mul($1, $3); }
+;
+
+divide
+: expr '/' expr
+{ $$ = divide($1, $3); }
+;
+
+neg
+: '~' expr
+{ $$ = neg($2); }
+;
+
+lt
+: expr '<' expr
+{ $$ = lt($1, $3); }
+;
+
+eq
+: expr '=' expr
+{ $$ = eq($1, $3); }
+;
+
+leq
+: expr '=' expr
+{ $$ = leq($1, $3); }
+;
+
+comp
+: NOT expr
+{ $$ = neg($2); }
+;
+
+object
+: OBJECTID
+{ $$ = object($1); }
+;
+
+int_const
+: INT_CONST
+{ $$ = int_const($1); }
+;
+
+string_const
+: STR_CONST
+{ $$ = string_const($1); }
+;
+
+bool_const
+: BOOL_CONST
+{ $$ = bool_const($1); }
+;
 
 
 /* end of grammar */

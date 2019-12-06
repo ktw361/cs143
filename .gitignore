@@ -11,3 +11,6 @@ cool-lex.cc
 cgen
 parser
 semant
+
+# PA2
+cool-parse.cc

@@ -143,42 +143,39 @@ documentation for details). */
 %type <formal> formal
 %type <cases> case_list
 %type <case_> case
-%type <expressions> expression_list
-%type <expressions> expr_list
+%type <expressions> expression_list  /* for  [[expr;]]+  */
+%type <expressions> expr_list        /* for   [ expr [[, expr]]* ]  */
 %type <expression> expression
 
-%type method
-%type attr
+%type <feature>method
+%type <feature>attr
 
-/* expresion_list is for  [[expr;]]+ , where expression == expr ; */
-%type expr
-/* expr_list is for   [ expr [[, expr]]* ]  */
-%type expr_list
+%type <expression> expr
 /* now is expr... */
-%type assign
-%type static_dispatch
-%type dispatch
-%type conda
-%type loop
-%type typcase
-%type block
-/* %type let       /1* nested let *1/ */
-/* %type let_body */  
-%type plus
-%type sub
-%type mul
-%type divide
-%type neg
-%type lt
-%type eq
-%type leq
-%type comp
-%type object   /* for ID */
-%type int_const
-%type string_const
-%type new
-%type isvoid
-%type bool_const
+%type <expression> assign
+%type <expression> static_dispatch
+%type <expression> dispatch
+%type <expression> cond
+%type <expression> loop
+%type <expression> typcase
+%type <expression> block
+/* %type <expression> let       /1* nested let *1/ */
+/* %type <expression> let_body */  
+%type <expression> plus
+%type <expression> sub
+%type <expression> mul
+%type <expression> divide
+%type <expression> neg
+%type <expression> lt
+%type <expression> eq
+%type <expression> leq
+%type <expression> comp
+%type <expression> object   /* for ID */
+%type <expression> int_const
+%type <expression> string_const
+%type <expression> new
+%type <expression> isvoid
+%type <expression> bool_const
 
 /* Precedence declarations go here. */
 
@@ -220,7 +217,6 @@ feature_list
 
 | %empty        /* empty feature list */
 { $$ = nil_Features(); }
-
 ;
 
 feature
@@ -298,7 +294,7 @@ expr
 | cond
 | loop
 | block
-| let
+/* | let */
 | typcase
 | new
 | isvoid

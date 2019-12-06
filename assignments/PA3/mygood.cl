@@ -1,2 +1,4 @@
 class Foo { 
-};
+    
+    bar 
+    };

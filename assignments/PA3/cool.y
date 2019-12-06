@@ -145,7 +145,7 @@ documentation for details). */
 /* %type <case_> case */
 /* %type <expressions> expression_list  /1* for  [[expr;]]+  *1/ */
 /* %type <expressions> expr_list        /1* for   [ expr [[, expr]]* ]  *1/ */
-/* %type <expression> expression */
+%type <expression> expression
 
 /* %type <feature>method */
 /* %type <feature>attr */
@@ -199,7 +199,7 @@ class_list
 
 /* If no parent is specified, the class inherits from the Object class. */
 class	
-: CLASS TYPEID '{'  '}' ';'
+: CLASS TYPEID '{' expression '}' ';'
 { $$ = class_($2, idtable.add_string("Object"), nil_Features(),
     stringtable.add_string(curr_filename)); }
 
@@ -207,6 +207,10 @@ class
 { $$ = class_($2, $4, nil_Features(), stringtable.add_string(curr_filename)); }
 ;
 
+expression 
+: OBJECTID
+{ $$ = object($1); }
+;
 /* feature list may be empty, but no empty features in list. */
 /* feature_list */
 /* : feature			/1* single class *1/ */

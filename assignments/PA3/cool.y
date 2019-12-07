@@ -394,11 +394,11 @@ let_body
 : IN expr 
 { $$ = $2; }
 
-| OBJECTID ':' TYPEID let_body 
-{ $$ = let($1, $3, no_expr(), $4); }
+| ',' OBJECTID ':' TYPEID let_body 
+{ $$ = let($2, $4, no_expr(), $5); }
 
-| OBJECTID ':' TYPEID ASSIGN expr let_body 
-{ $$ = let($1, $3, $5, $6); }
+| ',' OBJECTID ':' TYPEID ASSIGN expr let_body 
+{ $$ = let($2, $4, $6, $7); }
 ;
 
 new

@@ -223,6 +223,9 @@ class
 
 | CLASS TYPEID INHERITS TYPEID '{' '}' ';'
 { $$ = class_($2, $4, nil_Features(), stringtable.add_string(curr_filename)); }
+
+| CLASS error ';' /* TODO maybe unclosed feature? */
+{ @$ = @3; SET_NODELOC(@3); }
 ;
 
 /* feature list may be empty, but no empty features in list. */
@@ -240,6 +243,9 @@ feature
 
 | attr ';'
 { $$ = $1; }
+
+| error ';'
+{ @$ = @2; SET_NODELOC(@2); }
 ;
 
 method
@@ -380,6 +386,9 @@ typcase
 block
 : '{' expression_list '}'
 { $$ = block($2); }
+
+| '{' error '}'
+{ @$ = @3; SET_NODELOC(@3); }
 ;
 
 let

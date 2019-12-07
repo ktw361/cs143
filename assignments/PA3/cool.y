@@ -159,8 +159,8 @@ documentation for details). */
 %type <expression> loop
 %type <expression> typcase
 %type <expression> block
-/* %type <expression> let       /1* nested let *1/ */
-/* %type <expression> let_body */
+%type <expression> let       /* nested let */
+%type <expression> let_body
 %type <expression> plus
 %type <expression> sub
 %type <expression> mul
@@ -187,6 +187,7 @@ documentation for details). */
 %right '~'
 %left '@'
 %left '.'
+%precedence LET_STMT
 
 
 %%
@@ -311,7 +312,7 @@ expr
 | cond
 | loop
 | block
-/* | let */
+| let
 | typcase
 | new
 | isvoid
@@ -381,27 +382,24 @@ block
 { $$ = block($2); }
 ;
 
-/* let */
-/* : LET OBJECTID ':' TYPEID IN expr */
-/* { $$ = let($2, $4, no_expr(), $6); } */
+let
+: LET OBJECTID ':' TYPEID let_body %prec LET_STMT
+{ $$ = let($2, $4, no_expr(), $5); }
 
-/* | LET OBJECTID ':' TYPEID DARROW expr IN expr */
-/* { $$ = let($2, $4, $6, $8); } */
-/* ; */
+| LET OBJECTID ':' TYPEID DARROW expr let_body %prec LET_STMT
+{ $$ = let($2, $4, $6, $7); }
+;
 
-/* let */
-/* : ISVOID ISVOID {} */
-/* /1* { $$ = $2; } *1/ */
-/* /1* : ISVOID LET OBJECTID ':' TYPEID IN expr *1/ */
-/* /1* { $$ = let($3, $5, no_expr(), $7); } *1/ */
-/* ; */
+let_body
+: IN expr
+{ $$ = $2; }
 
-/* | OBJECTID ':' TYPEID let_body */
-/* { $$ = let($1, $3, no_expr(), $4); } */
+| OBJECTID ':' TYPEID let_body 
+{ $$ = let($1, $3, no_expr(), $4); }
 
-/* | OBJECTID ':' TYPEID DARROW expr let_body */
-/* { $$ = let($1, $3, $5, $6; } */
-/* ; */
+| OBJECTID ':' TYPEID DARROW expr let_body 
+{ $$ = let($1, $3, $5, $6; }
+;
 
 new
 : NEW TYPEID

@@ -8,13 +8,12 @@ class Main {
     o : Object;
     a : Int;
     main() : Object { 
-        isvoid a
         -- let x : Int in a
-        -- {
-        -- -- isvoid let x : Int in a;
-        -- let x : Int in a;
-        -- -- let a : Int <- 4, b : Int <- 5, c : Int <- 6 in 
-        -- }
+        {
+        isvoid a;
+        let x : Int in a;
+        -- let a : Int <- 4, b : Int <- 5, c : Int <- 6 in 
+        }
     };
     -- method(init : Int, des : Object): Int {
     --     {

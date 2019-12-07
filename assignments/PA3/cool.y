@@ -144,7 +144,7 @@ documentation for details). */
 %type <cases> case_list
 %type <case_> case
 %type <expressions> expression_list  /* for  [[expr;]]+  */
-%type <expressions> expr_list        /* for   [ expr [[, expr]]* ]  */
+%type <expressions> expr_list        /* for  [ expr [[, expr]]* ]  */
 %type <expression> expression
 
 %type <feature>method
@@ -159,8 +159,8 @@ documentation for details). */
 %type <expression> loop
 %type <expression> typcase
 %type <expression> block
-%type <expression> let       /* nested let */
-%type <expression> let_body
+/* %type <expression> let       /1* nested let *1/ */
+/* %type <expression> let_body */
 %type <expression> plus
 %type <expression> sub
 %type <expression> mul
@@ -178,6 +178,15 @@ documentation for details). */
 %type <expression> bool_const
 
 /* Precedence declarations go here. */
+%right ASSIGN
+%right NOT
+%left LE '<' '='
+%left '+' '-'
+%left '*' '/'
+%right ISVOID
+%right '~'
+%left '@'
+%left '.'
 
 
 %%
@@ -198,6 +207,7 @@ class_list
 ;
 
 /* If no parent is specified, the class inherits from the Object class. */
+/* explicit handle empty feature_list, we don't like epsilon move */
 class	
 : CLASS TYPEID '{' feature_list '}' ';'
 { $$ = class_($2, idtable.add_string("Object"), $4,
@@ -205,6 +215,13 @@ class
 
 | CLASS TYPEID INHERITS TYPEID '{' feature_list '}' ';'
 { $$ = class_($2, $4, $6, stringtable.add_string(curr_filename)); }
+
+| CLASS TYPEID '{' '}' ';'
+{ $$ = class_($2, idtable.add_string("Object"), nil_Features(),
+    stringtable.add_string(curr_filename)); }
+
+| CLASS TYPEID INHERITS TYPEID '{' '}' ';'
+{ $$ = class_($2, $4, nil_Features(), stringtable.add_string(curr_filename)); }
 ;
 
 /* feature list may be empty, but no empty features in list. */
@@ -214,9 +231,6 @@ feature_list
 
 | feature_list feature	/* several classes */
 { $$ = append_Features($1, single_Features($2)); }
-
-| %empty        /* empty feature list */
-{ $$ = nil_Features(); }
 ;
 
 feature
@@ -297,7 +311,7 @@ expr
 | cond
 | loop
 | block
-| let
+/* | let */
 | typcase
 | new
 | isvoid
@@ -375,10 +389,12 @@ block
 /* { $$ = let($2, $4, $6, $8); } */
 /* ; */
 
-let
-:  IN expr
-{ $$ = $2; }
-;
+/* let */
+/* : ISVOID ISVOID {} */
+/* /1* { $$ = $2; } *1/ */
+/* /1* : ISVOID LET OBJECTID ':' TYPEID IN expr *1/ */
+/* /1* { $$ = let($3, $5, no_expr(), $7); } *1/ */
+/* ; */
 
 /* | OBJECTID ':' TYPEID let_body */
 /* { $$ = let($1, $3, no_expr(), $4); } */

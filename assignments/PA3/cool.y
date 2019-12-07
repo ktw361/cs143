@@ -141,10 +141,10 @@ documentation for details). */
 %type <feature> feature
 %type <formals> formal_list
 %type <formal> formal
-/* %type <cases> case_list */
-/* %type <case_> case */
+%type <cases> case_list
+%type <case_> case
 %type <expressions> expression_list  /* for  [[expr;]]+  */
-/* %type <expressions> expr_list        /1* for   [ expr [[, expr]]* ]  *1/ */
+%type <expressions> expr_list        /* for   [ expr [[, expr]]* ]  */
 %type <expression> expression
 
 %type <feature>method
@@ -153,12 +153,12 @@ documentation for details). */
 %type <expression> expr
 /* /1* now is expr... *1/ */
 %type <expression> assign
-/* %type <expression> static_dispatch */
-/* %type <expression> dispatch */
+%type <expression> static_dispatch
+%type <expression> dispatch
 %type <expression> cond
 %type <expression> loop
-/* %type <expression> typcase */
-/* %type <expression> block */
+%type <expression> typcase
+%type <expression> block
 /* /1* %type <expression> let       /2* nested let *2/ *1/ */
 /* /1* %type <expression> let_body *1/ */  
 %type <expression> plus
@@ -216,7 +216,7 @@ feature_list
 { $$ = append_Features($1, single_Features($2)); }
 
 | %empty        /* empty feature list */
-{ $$ = nil_features(); }
+{ $$ = nil_Features(); }
 ;
 
 feature
@@ -228,17 +228,15 @@ feature
 ;
 
 method
-/* : OBJECTID '(' formal_list ')' ':' TYPEID '{' expressions '}'  /1* methods *1/ */
-: OBJECTID '(' formal_list ')' ':' TYPEID '{'  '}'  /* methods */
-{ $$ = method($1, $3, $6, nil_Expressions()); }
+: OBJECTID '(' formal_list ')' ':' TYPEID '{' expr '}'  /* methods */
+{ $$ = method($1, $3, $6, $8); }
 ;
 
 attr
 : OBJECTID ':' TYPEID  /* attrs, no init */ 
 { $$ = attr($1, $3, no_expr()); }
 
-/* | OBJECTID ':' TYPEID ASSIGN expression /1* attrs *1/ */ 
-| OBJECTID ':' TYPEID ASSIGN  /* attrs */ 
+| OBJECTID ':' TYPEID ASSIGN  expr /* attrs */ 
 { $$ = attr($1, $3, no_expr()); }
 ;
 
@@ -248,6 +246,9 @@ formal_list
 
 | formal_list ',' formal	/* several formals */
 { $$ = append_Formals($1, single_Formals($3)); }
+
+| %empty                    /* empty formals */
+{ $$ = nil_Formals(); }
 ;
 
 formal
@@ -255,18 +256,18 @@ formal
 { $$ = formal($1, $3); }
 ;
 
-/* case_list */
-/* : case              /1* single case *1/ */
-/* { $$ = single_Cases($1); } */
+case_list
+: case              /* single case */
+{ $$ = single_Cases($1); }
 
-/* | case_list case */
-/* { $$ = append_Cases($1, single_Cases($2)); } */
-/* ; */
+| case_list case
+{ $$ = append_Cases($1, single_Cases($2)); }
+;
 
-/* case */
-/* : OBJECTID ':' TYPEID DARROW expression ';' */
-/* { $$ = branch($1, $3, $5); } */
-/* ; */
+case
+: OBJECTID ':' TYPEID DARROW expr ';'
+{ $$ = branch($1, $3, $5); }
+;
 
 expression_list     /* expresion_list only means:  { [[expr;]]+ }  */
 : expression
@@ -278,30 +279,31 @@ expression_list     /* expresion_list only means:  { [[expr;]]+ }  */
 
 expression
 : expr ';'
-{ $$ = $1 }
+{ $$ = $1; }
 ;
 
-/* expr_list */
-/* : expr */ 
-/* { $$ = single_Expressions($1); } */
+expr_list
+: expr 
+{ $$ = single_Expressions($1); }
 
-/* | expr_list ',' expr */
-/* { $$ = append_Expressions($1, $3); } */
-/* ; */
+| expr_list ',' expr
+{ $$ = append_Expressions($1, single_Expressions($3)); }
+;
 
 expr 
 : assign
-/* | static_dispatch */
-/* | dispatch */
+| static_dispatch
+| dispatch
 | cond
 | loop
-/* | block */
+| block
 /* /1* | let *1/ */
-/* | typcase */
+| typcase
 | new
 | isvoid
 | plus
 | sub
+| mul
 | divide
 | neg
 | lt
@@ -321,29 +323,29 @@ assign
 { $$ = assign($1, $3); }
 ;
 
-/* static_dispatch */
-/* : expr '@' TYPEID '.' OBJECTID '(' ')' */
-/* { $$ = static_dispatch($1, $3, $5, nil_Expressions()); } */
+static_dispatch
+: expr '@' TYPEID '.' OBJECTID '(' ')'
+{ $$ = static_dispatch($1, $3, $5, nil_Expressions()); }
 
-/* | expr '@' TYPEID '.' OBJECTID '(' expr_list ')' */
-/* { $$ = static_dispatch($1, $3, $5, $7); } */
-/* ; */
+| expr '@' TYPEID '.' OBJECTID '(' expr_list ')'
+{ $$ = static_dispatch($1, $3, $5, $7); }
+;
 
-/* dispatch */
-/* : expr '.' OBJECTID '(' expr_list ')' */
-/* { $$ = dispatch($1, $3, $5); } */
+dispatch
+: expr '.' OBJECTID '(' expr_list ')'
+{ $$ = dispatch($1, $3, $5); }
 
-/* | expr '.' OBJECTID '(' ')' */
-/* { $$ = dispatch($1, $3, nil_Expressions(); } */
+| expr '.' OBJECTID '(' ')'
+{ $$ = dispatch($1, $3, nil_Expressions()); }
 
-/* | OBJECTID '(' expr_list ')' */ 
-/* { $$ = dispatch( */
-/*     object(stringtable.add_string("self")), $1, $3); } */
+| OBJECTID '(' expr_list ')' 
+{ $$ = dispatch(
+    object(stringtable.add_string("self")), $1, $3); }
 
-/* | OBJECTID '(' ')' */ 
-/* { $$ = dispatch( */
-/*     object(stringtable.add_string("self")), $1, nil_Expressions()); } */
-/* ; */
+| OBJECTID '(' ')' 
+{ $$ = dispatch(
+    object(stringtable.add_string("self")), $1, nil_Expressions()); }
+;
 
 cond
 : IF expr THEN expr ELSE expr FI
@@ -355,15 +357,15 @@ loop
 { $$ = loop($2, $4); }
 ;
 
-/* typcase */
-/* : CASE expr OF case_list ESAC */
-/* { $$ = typcase($2, $4); } */
-/* ; */
+typcase
+: CASE expr OF case_list ESAC
+{ $$ = typcase($2, $4); }
+;
 
-/* block */
-/* : '{' expression_list '}' */
-/* { $$ = block($2); } */
-/* ; */
+block
+: '{' expression_list '}'
+{ $$ = block($2); }
+;
 
 /* /1* let *1/ */
 /* /1* : LET OBJECTID ':' TYPEID IN let *1/ */
@@ -430,7 +432,7 @@ eq
 ;
 
 leq
-: expr '=' expr
+: expr LE expr
 { $$ = leq($1, $3); }
 ;
 

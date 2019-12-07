@@ -178,6 +178,7 @@ documentation for details). */
 %type <expression> bool_const
 
 /* Precedence declarations go here. */
+%right IN       /* for let statement */
 %right ASSIGN
 %right NOT
 %left LE '<' '='
@@ -187,7 +188,6 @@ documentation for details). */
 %right '~'
 %left '@'
 %left '.'
-%precedence LET_STMT
 
 
 %%
@@ -383,22 +383,22 @@ block
 ;
 
 let
-: LET OBJECTID ':' TYPEID let_body %prec LET_STMT
+: LET OBJECTID ':' TYPEID let_body 
 { $$ = let($2, $4, no_expr(), $5); }
 
-| LET OBJECTID ':' TYPEID DARROW expr let_body %prec LET_STMT
+| LET OBJECTID ':' TYPEID ASSIGN expr let_body 
 { $$ = let($2, $4, $6, $7); }
 ;
 
 let_body
-: IN expr
+: IN expr 
 { $$ = $2; }
 
 | OBJECTID ':' TYPEID let_body 
 { $$ = let($1, $3, no_expr(), $4); }
 
-| OBJECTID ':' TYPEID DARROW expr let_body 
-{ $$ = let($1, $3, $5, $6; }
+| OBJECTID ':' TYPEID ASSIGN expr let_body 
+{ $$ = let($1, $3, $5, $6); }
 ;
 
 new

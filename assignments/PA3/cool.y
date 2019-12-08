@@ -144,14 +144,14 @@ documentation for details). */
 %type <cases> case_list
 %type <case_> case
 %type <expressions> expression_list  /* for  [[expr;]]+  */
-%type <expressions> expr_list        /* for   [ expr [[, expr]]* ]  */
+%type <expressions> expr_list        /* for  [ expr [[, expr]]* ]  */
 %type <expression> expression
 
 %type <feature>method
 %type <feature>attr
 
 %type <expression> expr
-/* now is expr... */
+/* /1* now is expr... *1/ */
 %type <expression> assign
 %type <expression> static_dispatch
 %type <expression> dispatch
@@ -159,8 +159,8 @@ documentation for details). */
 %type <expression> loop
 %type <expression> typcase
 %type <expression> block
-/* %type <expression> let       /1* nested let *1/ */
-/* %type <expression> let_body */  
+%type <expression> let       /* nested let */
+%type <expression> let_body
 %type <expression> plus
 %type <expression> sub
 %type <expression> mul
@@ -178,6 +178,16 @@ documentation for details). */
 %type <expression> bool_const
 
 /* Precedence declarations go here. */
+%right IN       /* for let statement */
+%right ASSIGN
+%right NOT
+%nonassoc LE '<' '='
+%left '+' '-'
+%left '*' '/'
+%right ISVOID
+%right '~'
+%left '@'
+%left '.'
 
 
 %%
@@ -198,6 +208,7 @@ class_list
 ;
 
 /* If no parent is specified, the class inherits from the Object class. */
+/* explicit handle empty feature_list, we don't like epsilon move */
 class	
 : CLASS TYPEID '{' feature_list '}' ';'
 { $$ = class_($2, idtable.add_string("Object"), $4,
@@ -205,18 +216,25 @@ class
 
 | CLASS TYPEID INHERITS TYPEID '{' feature_list '}' ';'
 { $$ = class_($2, $4, $6, stringtable.add_string(curr_filename)); }
+
+| CLASS TYPEID '{' '}' ';'
+{ $$ = class_($2, idtable.add_string("Object"), nil_Features(),
+    stringtable.add_string(curr_filename)); }
+
+| CLASS TYPEID INHERITS TYPEID '{' '}' ';'
+{ $$ = class_($2, $4, nil_Features(), stringtable.add_string(curr_filename)); }
+
+| error ';' 
+{ @$ = @2; SET_NODELOC(@2); }
 ;
 
-/* Feature list may be empty, but no empty features in list. */
+/* feature list may be empty, but no empty features in list. */
 feature_list
 : feature			/* single class */
 { $$ = single_Features($1); }
 
-| feature_list class	/* several classes */
+| feature_list feature	/* several classes */
 { $$ = append_Features($1, single_Features($2)); }
-
-| %empty        /* empty feature list */
-{ $$ = nil_Features(); }
 ;
 
 feature
@@ -225,10 +243,13 @@ feature
 
 | attr ';'
 { $$ = $1; }
+
+| error ';'
+{ @$ = @2; SET_NODELOC(@2); }
 ;
 
 method
-: OBJECTID '(' formals ')' ':' TYPEID '{' expressions '}'  /* methods */
+: OBJECTID '(' formal_list ')' ':' TYPEID '{' expr '}'  /* methods */
 { $$ = method($1, $3, $6, $8); }
 ;
 
@@ -236,8 +257,8 @@ attr
 : OBJECTID ':' TYPEID  /* attrs, no init */ 
 { $$ = attr($1, $3, no_expr()); }
 
-| OBJECTID ':' TYPEID ASSIGN expression /* attrs */ 
-{ $$ = attr($1, $3, $5); }
+| OBJECTID ':' TYPEID ASSIGN  expr /* attrs */ 
+{ $$ = attr($1, $3, no_expr()); }
 ;
 
 formal_list
@@ -245,7 +266,10 @@ formal_list
 { $$ = single_Formals($1); }
 
 | formal_list ',' formal	/* several formals */
-{ $$ = append_Formals($1, single_Formals($2)); }
+{ $$ = append_Formals($1, single_Formals($3)); }
+
+| %empty                    /* empty formals */
+{ $$ = nil_Formals(); }
 ;
 
 formal
@@ -262,7 +286,7 @@ case_list
 ;
 
 case
-: OBJECTID ':' TYPEID DARROW expression ';'
+: OBJECTID ':' TYPEID DARROW expr ';'
 { $$ = branch($1, $3, $5); }
 ;
 
@@ -276,7 +300,10 @@ expression_list     /* expresion_list only means:  { [[expr;]]+ }  */
 
 expression
 : expr ';'
-{ $$ = $1 }
+{ $$ = $1; }
+
+| error ';'
+{ @$ = @2; SET_NODELOC(@2); }
 ;
 
 expr_list
@@ -284,7 +311,7 @@ expr_list
 { $$ = single_Expressions($1); }
 
 | expr_list ',' expr
-{ $$ = append_Expressions($1, $3); }
+{ $$ = append_Expressions($1, single_Expressions($3)); }
 ;
 
 expr 
@@ -294,12 +321,13 @@ expr
 | cond
 | loop
 | block
-/* | let */
+| let
 | typcase
 | new
 | isvoid
 | plus
 | sub
+| mul
 | divide
 | neg
 | lt
@@ -307,7 +335,7 @@ expr
 | leq
 | comp
 | '(' expr ')'
-    { $$ = $1; }
+    { $$ = $2; }
 | object
 | int_const
 | string_const
@@ -332,7 +360,7 @@ dispatch
 { $$ = dispatch($1, $3, $5); }
 
 | expr '.' OBJECTID '(' ')'
-{ $$ = dispatch($1, $3, nil_Expressions(); }
+{ $$ = dispatch($1, $3, nil_Expressions()); }
 
 | OBJECTID '(' expr_list ')' 
 { $$ = dispatch(
@@ -363,24 +391,27 @@ block
 { $$ = block($2); }
 ;
 
-/* let */
-/* : LET OBJECTID ':' TYPEID IN let */
-/* { $$ = */ 
+let
+: LET OBJECTID ':' TYPEID let_body 
+{ $$ = let($2, $4, no_expr(), $5); }
 
-/* | LET OBJECTID ':' TYPEID DARROW expr IN let */
+| LET OBJECTID ':' TYPEID ASSIGN expr let_body 
+{ $$ = let($2, $4, $6, $7); }
+;
 
-/* ; */
+let_body
+: IN expr 
+{ $$ = $2; }
 
-/* let */
-/* : LET OBJECTID ':' TYPEID IN expr */
-/* { $$ = let($2, $4, no_expr, $86; } */
+| ',' OBJECTID ':' TYPEID let_body 
+{ $$ = let($2, $4, no_expr(), $5); }
 
-/* | LET OBJECTID ':' TYPEID DARROW expr IN expr */
-/* { $$ = let($2, $4, $6, $8); } */
+| ',' OBJECTID ':' TYPEID ASSIGN expr let_body 
+{ $$ = let($2, $4, $6, $7); }
 
-/* | LET OBJECTID ':' TYPEID DARROW expr let_ext IN expr */
-/* { $$ = let($2, $4, $6, let(let_ext, ); } */
-/* ; */
+| error let_body
+{ @$ = @2; SET_NODELOC(@2); }
+;
 
 new
 : NEW TYPEID
@@ -412,9 +443,9 @@ divide
 { $$ = divide($1, $3); }
 ;
 
-neg
-: '~' expr
-{ $$ = neg($2); }
+comp
+: NOT expr
+{ $$ = comp($2); }
 ;
 
 lt
@@ -428,12 +459,12 @@ eq
 ;
 
 leq
-: expr '=' expr
+: expr LE expr
 { $$ = leq($1, $3); }
 ;
 
-comp
-: NOT expr
+neg
+: '~' expr
 { $$ = neg($2); }
 ;
 
@@ -474,5 +505,3 @@ void yyerror(char *s)
   
   if(omerrs>50) {fprintf(stdout, "More than 50 errors\n"); exit(1);}
 }
-
-

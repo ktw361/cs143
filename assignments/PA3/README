@@ -130,3 +130,26 @@ Instructions
 
 Write-up for PA3
 ----------------
+1. for let statement:
+Use lowest right assosiativity of nontermianl IN to resolve ambiguous
+To handle error during let statement, try to catch error in let_body,
+if one error occurs during one of let variable, the rest won't be messed up given
+a good right hand side part w.r.t error.
+
+2. epsilon move is used only in empty formal_list, empty class features is handled
+explicitly to resolve shift-reduce conflict.
+
+3. In mygood.cl I tested everything..., (for bad.cl I use grading.pl....)
+
+4. < <= = if nonassociative (different from c++)
+
+5. expr vs expression
+expr is the canonial expression rule, where
+expression == expr ';'
+expression_list =>* expr ';' ... ';' expr ';
+expr_list =>* expr ',' ... ',' expr 
+
+There's only two kinds of sequential exprs:
+1) block: where expr end with ';', thus we use (and only here) expression_list
+to represent sequential expres inside a block.
+2) dispatch/static_dispatch: expr_list is used in this case.

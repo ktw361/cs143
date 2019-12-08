@@ -11,17 +11,10 @@
 class A {
 };
 
--- class A {
---     member() : Int {
---         Int 
---     };
--- };
-
 class A {
     func() : Int {
         {
-        let Int : Int <- 5 in x;
-        let x : Int <- 4 in x;
+        let Int : Int <- 5, a : Int <-5  in x;
         }
     };
 };

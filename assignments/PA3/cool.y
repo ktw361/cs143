@@ -181,7 +181,7 @@ documentation for details). */
 %right IN       /* for let statement */
 %right ASSIGN
 %right NOT
-%left LE '<' '='
+%nonassoc LE '<' '='
 %left '+' '-'
 %left '*' '/'
 %right ISVOID
@@ -224,8 +224,8 @@ class
 | CLASS TYPEID INHERITS TYPEID '{' '}' ';'
 { $$ = class_($2, $4, nil_Features(), stringtable.add_string(curr_filename)); }
 
-| CLASS error ';' /* TODO maybe unclosed feature? */
-{ @$ = @3; SET_NODELOC(@3); }
+| error ';' 
+{ @$ = @2; SET_NODELOC(@2); }
 ;
 
 /* feature list may be empty, but no empty features in list. */
@@ -301,6 +301,9 @@ expression_list     /* expresion_list only means:  { [[expr;]]+ }  */
 expression
 : expr ';'
 { $$ = $1; }
+
+| error ';'
+{ @$ = @2; SET_NODELOC(@2); }
 ;
 
 expr_list
@@ -386,9 +389,6 @@ typcase
 block
 : '{' expression_list '}'
 { $$ = block($2); }
-
-| '{' error '}'
-{ @$ = @3; SET_NODELOC(@3); }
 ;
 
 let
@@ -408,6 +408,9 @@ let_body
 
 | ',' OBJECTID ':' TYPEID ASSIGN expr let_body 
 { $$ = let($2, $4, $6, $7); }
+
+| error let_body
+{ @$ = @2; SET_NODELOC(@2); }
 ;
 
 new
@@ -440,9 +443,9 @@ divide
 { $$ = divide($1, $3); }
 ;
 
-neg
-: '~' expr
-{ $$ = neg($2); }
+comp
+: NOT expr
+{ $$ = comp($2); }
 ;
 
 lt
@@ -460,8 +463,8 @@ leq
 { $$ = leq($1, $3); }
 ;
 
-comp
-: NOT expr
+neg
+: '~' expr
 { $$ = neg($2); }
 ;
 

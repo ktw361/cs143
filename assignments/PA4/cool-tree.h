@@ -32,9 +32,15 @@ public:
 typedef class Class__class *Class_;
 
 class Class__class : public tree_node {
+    typedef List<Class__class> IGnode_list;
 public:
    tree_node *copy()		 { return copy_Class_(); }
    virtual Class_ copy_Class_() = 0;
+   // Added for semantic phase
+   virtual Symbol get_name() = 0;
+   virtual Symbol get_parent() = 0;
+   virtual IGnode_list *get_children() = 0;
+   virtual void add_children(Class_ c) = 0;
 
 #ifdef Class__EXTRAS
    Class__EXTRAS
@@ -147,6 +153,8 @@ public:
 
 // define constructor - class_
 class class__class : public Class__class {
+    typedef List<Class__class> IGnode_list;
+    IGnode_list *children;
 protected:
    Symbol name;
    Symbol parent;
@@ -161,6 +169,11 @@ public:
    }
    Class_ copy_Class_();
    void dump(ostream& stream, int n);
+   // Added for semantic phase
+   Symbol get_name();
+   Symbol get_parent();
+   IGnode_list *get_children();
+   void add_children(Class_ c);
 
 #ifdef Class__SHARED_EXTRAS
    Class__SHARED_EXTRAS

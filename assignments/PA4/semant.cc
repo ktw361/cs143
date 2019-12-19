@@ -6,6 +6,11 @@
 #include "semant.h"
 #include "utilities.h"
 
+#include <map>
+#include <deque>
+// for debug
+#include <typeinfo>
+
 
 extern int semant_debug;
 extern char *curr_filename;
@@ -82,11 +87,131 @@ static void initialize_constants(void)
 }
 
 
+/* Implementation of added function in cool-tree.h */
+typedef List<Class__class> IGnode_list;
+Symbol class__class::get_name() { return name; }
+Symbol class__class::get_parent() { return parent; }
+IGnode_list *class__class::get_children() {
+    return children;
+}
+void class__class::add_children(Class_ c) { 
+    children = new IGnode_list(c, children); 
+}
+
+/* end of implementation in cool-tree.h */
+
+ostream &dump_fname_lineno(ostream &s, Symbol fname, int lineno) {
+    s << fname << ":" <<  lineno << ": ";
+    return s;
+}
+
+bool ClassTable::check_inheritance_graph() {
+    // Connect every IGnode(class__class_ to its children
+    typedef std::map<Symbol, Class_>::iterator _Iter;
+    Symbol prim_types[] = {Int, Bool, Str};
+    for (_Iter iter = ig_nodes.begin(); iter != ig_nodes.end(); ++iter) {
+        Class_ node = iter->second;
+        // Skip Object
+        if (node->get_name() == Object) continue;
+
+        Symbol parent = node->get_parent();
+        // Make sure it does not inherit from primitive types
+        for (int i = 0; i != sizeof(prim_types)/sizeof(Symbol); ++i) {
+            if (parent == prim_types[i]) {
+                dump_fname_lineno(cerr, node->get_filename(), node->get_line_number())
+                    << "Class " << node->get_name()
+                    << " cannot inherits class " 
+                    << parent << "." << endl;
+                return false;
+            }
+        }
+        // Check inherit from undefined
+        if (!ig_nodes.count(parent)) {
+            dump_fname_lineno(cerr, node->get_filename(), node->get_line_number())
+                << "Class " << node->get_name()
+                << " inherits from an undefined class " 
+                << parent << "." << endl;
+            return false;
+        } 
+        Class_ parent_node = ig_nodes[parent];
+        parent_node->add_children(node);
+        if (semant_debug) {
+            cout << "Adding: " << node->get_name() << " to child of " 
+                << parent_node->get_name()<< endl;
+        }
+    }
+
+    // BFS
+    std::map<Class_, bool> visited;
+    std::deque<Class_> que;
+    que.push_back(Object_node); // start bfs from root
+    while(!que.empty()) {
+        Class_ node = que.front();
+        cout << "BFSing: " << node->get_name() << endl;
+        que.pop_front();
+        visited[node] = true;
+
+        for (IGnode_list *l = node->get_children(); l != NULL; l = l->tl()) {
+            Class_ child = l->hd();
+            // No need to check multiple inheritance, its done by Grammar/parser
+            if (visited.count(child)) {
+                // inheritance cycle
+                Symbol cmp = child->get_name();
+                while(child->get_parent() != cmp) {
+                    dump_fname_lineno(
+                            cerr, child->get_filename(), child->get_line_number())
+                        << "Class " << child->get_name() 
+                        << ", or an ancestor of " << child->get_name()
+                        << ", is involved in an inheritance cycle." << endl;
+                    child = ig_nodes[child->get_name()];
+                }
+                return false;
+            }
+            que.push_back(child);
+        }
+    }
+    // For those no visited by bfs, cycle must occurs.
+    bool flag = true;
+    for (_Iter iter = ig_nodes.begin(); iter != ig_nodes.end(); ++iter) {
+        Class_ node = iter->second;
+        if (visited.count(node)) continue;
+        else {
+            dump_fname_lineno(
+                    cerr, node->get_filename(), node->get_line_number())
+                << "Class " << node->get_name() 
+                << ", or an ancestor of " << node->get_name()
+                << ", is involved in an inheritance cycle." << endl;
+            flag = false;
+        }
+    }
+
+    return flag;
+}
 
 ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) {
 
     /* Fill this in */
+    install_basic_classes();
+    if (semant_debug)
+        cout <<  "Num classes: " << classes->len() << endl;
+    // Gather class infos into ig_nodes, 1st pass
+    for (int i = classes->first(); classes->more(i); i = classes->next(i)) {
+        Class_ cur = classes->nth(i);
+        if (semant_debug) {
+            cout << "Gathering: " << cur->get_name() << endl;
+        }
+        if (ig_nodes.count(cur->get_name())) {
+            // multiple definition
+            semant_error();
+            cerr << cur->get_filename() << ":";
+            cerr << cur->get_line_number() << ": ";
+            cerr << "Class " << cur->get_name();
+            cerr << " was previously defined." << endl;
+        } else 
+            ig_nodes[cur->get_name()] = cur;
+    }
 
+    check_inheritance_graph();
 }
 
 void ClassTable::install_basic_classes() {
@@ -188,6 +313,14 @@ void ClassTable::install_basic_classes() {
 						      Str, 
 						      no_expr()))),
 	       filename);
+
+    // Register to ig_nodes
+    Object_node = Object_class;
+    ig_nodes[Object] = Object_node;
+    ig_nodes[IO] = IO_class;
+    ig_nodes[Int] = Int_class;
+    ig_nodes[Str] = Str_class;
+    ig_nodes[Bool] = Bool_class;
 }
 
 ////////////////////////////////////////////////////////////////////

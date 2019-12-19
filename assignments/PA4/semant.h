@@ -8,6 +8,8 @@
 #include "symtab.h"
 #include "list.h"
 
+#include <map>
+
 #define TRUE 1
 #define FALSE 0
 
@@ -24,6 +26,13 @@ private:
   int semant_errors;
   void install_basic_classes();
   ostream& error_stream;
+  // 
+  SymbolTable<Symbol, tree_node> obj_env;
+  SymbolTable<Symbol, tree_node> method_env;
+
+  Class_ Object_node;
+  std::map<Symbol, Class_> ig_nodes;  // Inheritance Graph nodes
+  bool check_inheritance_graph();
 
 public:
   ClassTable(Classes);

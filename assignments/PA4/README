@@ -164,6 +164,22 @@ Instructions
 
 Write-up for PA4
 ----------------
+types of semantic errors:
+ multiple definition of class;
+ inherits from primitive types: Int Bool Str
+ inherits from undefined classes
+
+
+Some design notes:
+1. since: 
+    `typedef class Class__class *Class_;`
+  We use List<Class__class> to store ig_nodes, rather than Class*, 
+because latter will cause address pointer points to a same address.
+
+2. for cyclic inheritance, since cool is single inheritance, 
+any node not connected to Object is in cyclic dependency.
+
+
 1. What requirements do I need to check?
 
 

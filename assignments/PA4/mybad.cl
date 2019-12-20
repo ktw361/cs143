@@ -1,11 +1,13 @@
-class A inherits P {};
-class B inherits A {};
-class P inherits B {};
+class A  {};
 class C {
 	a : Int;
 	b : Bool;
-	init(x : Int, y : Bool) : C {
+	init(x : Int, y : Booll) : Css{
            {
+        let x : Intt in 5;
+        case a of 
+            a1 : Int2 => 5;
+        esac;
 		a <- x;
 		b <- y;
 		self;

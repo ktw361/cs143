@@ -179,6 +179,9 @@ because latter will cause address pointer points to a same address.
 2. for cyclic inheritance, since cool is single inheritance, 
 any node not connected to Object is in cyclic dependency.
 
+3. We use direct comparison on Symbol (address comparison),
+Symbol is a pointer(address), but also act as an unique id.
+
 
 1. What requirements do I need to check?
 

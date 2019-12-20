@@ -39,6 +39,7 @@ public:
    // Added for semantic phase
    virtual Symbol get_name() = 0;
    virtual Symbol get_parent() = 0;
+   virtual Features get_features() = 0;
    virtual IGnode_list *get_children() = 0;
    virtual void add_children(Class_ c) = 0;
 
@@ -55,6 +56,13 @@ class Feature_class : public tree_node {
 public:
    tree_node *copy()		 { return copy_Feature(); }
    virtual Feature copy_Feature() = 0;
+   // Semant
+   virtual bool is_method() = 0;
+   virtual Symbol get_name() = 0;
+   virtual Symbol get_type() = 0;
+   virtual Expression get_expr() = 0;
+   // method_class
+   virtual Formals get_formals();
 
 #ifdef Feature_EXTRAS
    Feature_EXTRAS
@@ -69,6 +77,9 @@ class Formal_class : public tree_node {
 public:
    tree_node *copy()		 { return copy_Formal(); }
    virtual Formal copy_Formal() = 0;
+   // Semant
+   virtual Symbol get_name() = 0;
+   virtual Symbol get_type() = 0;
 
 #ifdef Formal_EXTRAS
    Formal_EXTRAS
@@ -83,6 +94,9 @@ class Expression_class : public tree_node {
 public:
    tree_node *copy()		 { return copy_Expression(); }
    virtual Expression copy_Expression() = 0;
+   // Semant
+   virtual bool is_let();
+   virtual bool is_typcase();
 
 #ifdef Expression_EXTRAS
    Expression_EXTRAS
@@ -97,6 +111,10 @@ class Case_class : public tree_node {
 public:
    tree_node *copy()		 { return copy_Case(); }
    virtual Case copy_Case() = 0;
+   // Semant
+   virtual Symbol get_name() = 0;
+   virtual Symbol get_type() = 0;
+   virtual Expression get_expr() = 0;
 
 #ifdef Case_EXTRAS
    Case_EXTRAS
@@ -172,6 +190,7 @@ public:
    // Added for semantic phase
    Symbol get_name();
    Symbol get_parent();
+   Features get_features();
    IGnode_list *get_children();
    void add_children(Class_ c);
 
@@ -200,6 +219,12 @@ public:
    }
    Feature copy_Feature();
    void dump(ostream& stream, int n);
+   // Semantic
+   bool is_method();
+   Symbol get_name();
+   Formals get_formals();
+   Symbol get_type();
+   Expression get_expr();
 
 #ifdef Feature_SHARED_EXTRAS
    Feature_SHARED_EXTRAS
@@ -224,6 +249,11 @@ public:
    }
    Feature copy_Feature();
    void dump(ostream& stream, int n);
+   // Semant
+   bool is_method();
+   Symbol get_name();
+   Symbol get_type();
+   Expression get_expr();
 
 #ifdef Feature_SHARED_EXTRAS
    Feature_SHARED_EXTRAS
@@ -246,6 +276,9 @@ public:
    }
    Formal copy_Formal();
    void dump(ostream& stream, int n);
+   // Semant
+   Symbol get_name();
+   Symbol get_type();
 
 #ifdef Formal_SHARED_EXTRAS
    Formal_SHARED_EXTRAS
@@ -270,6 +303,10 @@ public:
    }
    Case copy_Case();
    void dump(ostream& stream, int n);
+   // Semant
+    Symbol get_name();
+    Symbol get_type();
+    Expression get_expr();
 
 #ifdef Case_SHARED_EXTRAS
    Case_SHARED_EXTRAS
@@ -410,6 +447,10 @@ public:
    }
    Expression copy_Expression();
    void dump(ostream& stream, int n);
+   // Semant
+   bool is_typcase();
+   Expression get_expr();
+   Cases get_cases();
 
 #ifdef Expression_SHARED_EXTRAS
    Expression_SHARED_EXTRAS
@@ -456,6 +497,13 @@ public:
    }
    Expression copy_Expression();
    void dump(ostream& stream, int n);
+   // Semant
+   bool is_let();
+   Symbol get_iden();
+   Symbol get_type();
+   Expression get_init();
+   Expression get_body();
+   
 
 #ifdef Expression_SHARED_EXTRAS
    Expression_SHARED_EXTRAS

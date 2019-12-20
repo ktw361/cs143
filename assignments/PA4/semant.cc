@@ -87,10 +87,12 @@ static void initialize_constants(void)
 }
 
 
-/* Implementation of added function in cool-tree.h */
+/**** Implementation of added function in cool-tree.h ****/
+/* class__class */
 typedef List<Class__class> IGnode_list;
 Symbol class__class::get_name() { return name; }
 Symbol class__class::get_parent() { return parent; }
+Features class__class::get_features() { return features; }
 IGnode_list *class__class::get_children() {
     return children;
 }
@@ -98,15 +100,56 @@ void class__class::add_children(Class_ c) {
     children = new IGnode_list(c, children); 
 }
 
-/* end of implementation in cool-tree.h */
+/* Feature */
+Formals Feature_class::get_formals() { return nil_Formals(); }
 
-ostream &dump_fname_lineno(ostream &s, Symbol fname, int lineno) {
-    s << fname << ":" <<  lineno << ": ";
-    return s;
-}
+/* method_class */
+bool method_class::is_method() { return true; }
+Symbol method_class::get_name() { return name; }
+Formals method_class::get_formals() { return formals; }
+Symbol method_class::get_type() { return return_type; }
+Expression method_class::get_expr() { return expr; }
+
+/* attr_class */
+bool attr_class::is_method() { return false; }
+Symbol attr_class::get_name() { return name; }
+Symbol attr_class::get_type() { return type_decl; }
+Expression attr_class::get_expr() { return init; }
+
+/* formal_class */
+Symbol formal_class::get_name() { return name; }
+Symbol formal_class::get_type() { return type_decl; }
+
+/* Expression_class */
+bool Expression_class::is_let() { return false; }
+bool Expression_class::is_typcase() { return false; }
+
+/* let_class */
+bool let_class::is_let() { return true; }
+Symbol let_class::get_iden() { return identifier; }
+Symbol let_class::get_type() { return type_decl; }
+Expression let_class::get_init() { return init; }
+Expression let_class::get_body() { return body; }
+
+/* typcase_class */
+bool typcase_class::is_typcase() { return true; }
+Expression typcase_class::get_expr() { return expr; }
+Cases typcase_class::get_cases() { return cases; }
+
+/* branch_class */
+Symbol branch_class::get_name() { return name; }
+Symbol branch_class::get_type() { return type_decl; }
+Expression branch_class::get_expr() { return expr; }
+
+/**** end of implementation in cool-tree.h ****/
+
+typedef SymbolTable<Symbol, Symbol> EnvType;
+// Can't use plain function, as tree_node doesn't have get_name()
+#define dump_fname_lineno(s, n)             \
+(s) << (n)->get_filename() << ":" <<  (n)->get_line_number() << ": "
 
 bool ClassTable::check_inheritance_graph() {
-    // Connect every IGnode(class__class_ to its children
+    // Connect every IGnode(Class_) to its children
     typedef std::map<Symbol, Class_>::iterator _Iter;
     Symbol prim_types[] = {Int, Bool, Str};
     for (_Iter iter = ig_nodes.begin(); iter != ig_nodes.end(); ++iter) {
@@ -118,7 +161,8 @@ bool ClassTable::check_inheritance_graph() {
         // Make sure it does not inherit from primitive types
         for (int i = 0; i != sizeof(prim_types)/sizeof(Symbol); ++i) {
             if (parent == prim_types[i]) {
-                dump_fname_lineno(cerr, node->get_filename(), node->get_line_number())
+                semant_error();
+                dump_fname_lineno(cerr, node)
                     << "Class " << node->get_name()
                     << " cannot inherits class " 
                     << parent << "." << endl;
@@ -127,7 +171,8 @@ bool ClassTable::check_inheritance_graph() {
         }
         // Check inherit from undefined
         if (!ig_nodes.count(parent)) {
-            dump_fname_lineno(cerr, node->get_filename(), node->get_line_number())
+            semant_error();
+            dump_fname_lineno(cerr, node)
                 << "Class " << node->get_name()
                 << " inherits from an undefined class " 
                 << parent << "." << endl;
@@ -147,7 +192,8 @@ bool ClassTable::check_inheritance_graph() {
     que.push_back(Object_node); // start bfs from root
     while(!que.empty()) {
         Class_ node = que.front();
-        cout << "BFSing: " << node->get_name() << endl;
+        if (semant_debug)
+            cout << "BFSing: " << node->get_name() << endl;
         que.pop_front();
         visited[node] = true;
 
@@ -158,8 +204,8 @@ bool ClassTable::check_inheritance_graph() {
                 // inheritance cycle
                 Symbol cmp = child->get_name();
                 while(child->get_parent() != cmp) {
-                    dump_fname_lineno(
-                            cerr, child->get_filename(), child->get_line_number())
+                    semant_error();
+                    dump_fname_lineno(cerr, child)
                         << "Class " << child->get_name() 
                         << ", or an ancestor of " << child->get_name()
                         << ", is involved in an inheritance cycle." << endl;
@@ -176,8 +222,8 @@ bool ClassTable::check_inheritance_graph() {
         Class_ node = iter->second;
         if (visited.count(node)) continue;
         else {
-            dump_fname_lineno(
-                    cerr, node->get_filename(), node->get_line_number())
+            semant_error();
+            dump_fname_lineno(cerr, node)
                 << "Class " << node->get_name() 
                 << ", or an ancestor of " << node->get_name()
                 << ", is involved in an inheritance cycle." << endl;
@@ -188,9 +234,123 @@ bool ClassTable::check_inheritance_graph() {
     return flag;
 }
 
+
+void ClassTable::_add_formals(Feature feat, Class_ cls) {
+    Formals formals = feat->get_formals();
+    for (int i = formals->first(); formals->more(i); i = formals->next(i)) {
+        Formal form = formals->nth(i);
+        if (!ig_nodes.count(form->get_type())) {
+            semant_error();
+            dump_fname_lineno(cerr, cls)
+                << "Class " << form->get_type()
+                << " of formal paramer " << form->get_name()
+                << " is undefined." << endl;
+            continue;
+        }
+        obj_env->addid(form->get_name(), new Symbol(form->get_type()));
+    }
+}
+
+void ClassTable::_add_expr(Expression expr, Class_ cls) {
+    if (expr->is_let()) {
+        let_class *e = dynamic_cast<let_class*>(expr);
+        obj_env->enterscope();
+        if (!ig_nodes.count(e->get_type())) {
+            semant_error();
+            dump_fname_lineno(cerr, cls)
+                << "Class " << e->get_type()
+                << " of let-bound identifier " << e->get_iden()
+                << " is undefined." << endl;
+            obj_env->exitscope();
+            return;
+        }
+        obj_env->addid(e->get_iden(), new Symbol(e->get_type()));
+
+        // inner scope for init expression
+        obj_env->enterscope();
+        _add_expr(e->get_init(), cls);
+        obj_env->exitscope();
+
+        _add_expr(e->get_body(), cls);
+        obj_env->exitscope();
+    } else if (expr->is_typcase()) {
+        typcase_class *e = dynamic_cast<typcase_class*>(expr);
+        _add_expr(e->get_expr(), cls);
+        Cases cases = e->get_cases();
+        for (int i = cases->first(); cases->more(i); i = cases->next(i)) {
+            Case c = cases->nth(i);
+            obj_env->enterscope();
+            if (!ig_nodes.count(c->get_type())) {
+                semant_error();
+                dump_fname_lineno(cerr, cls)
+                    << "Class " << c->get_type()
+                    << " of case branch if undefined." << endl;
+                obj_env->exitscope();
+                continue;
+            }
+            obj_env->addid(c->get_name(), new Symbol(c->get_type()));
+            _add_expr(c->get_expr(), cls);
+            obj_env->exitscope();
+        }
+    } else {
+        ;
+    }
+}
+
+void ClassTable::_decl_class(Class_ cls) {
+    obj_env->enterscope();
+    method_env->enterscope();
+    if (semant_debug)  cout << "Declaring class: " << cls->get_name() << endl;
+    Features features = cls->get_features();
+    for (int i = features->first(); features->more(i); i = features->next(i)) {
+        Feature f = features->nth(i);
+        Symbol name = f->get_name();
+        if (f->is_method()) {
+            if (semant_debug) cout << "Method: " << name << endl;
+            // check return type declared
+            if (!ig_nodes.count(f->get_type())) {
+                semant_error();
+                dump_fname_lineno(cerr, cls)
+                    << "Undefined return type " << f->get_type()
+                    << " in method " << name << "." << endl;
+                continue;
+            }
+            method_env->addid(name, new Symbol(f->get_type()));
+            // handle formals
+            _add_formals(f, cls);
+            // handle expressions
+            obj_env->enterscope();
+            _add_expr(f->get_expr(), cls);
+            obj_env->exitscope();
+        } else {
+            if (semant_debug) cout << "Attr: " << name << endl;
+            // check attr type declared
+            if (!ig_nodes.count(f->get_type())) {
+                semant_error();
+                dump_fname_lineno(cerr, cls)
+                    << "Class " << f->get_type()
+                    << " of attribute " << name
+                    << " is undefined." << endl;
+                continue;
+            }
+            obj_env->addid(name, new Symbol(f->get_type()));
+            // handle init expressions
+            obj_env->enterscope();
+            _add_expr(f->get_expr(), cls);
+            obj_env->exitscope();
+        }
+    }
+    obj_env->exitscope();
+    method_env->exitscope();
+}
+
 ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) {
 
     /* Fill this in */
+    obj_env = new SymbolTable<Symbol, Symbol>();
+    method_env = new SymbolTable<Symbol, Symbol>();
+
+    // Part I: Check inheritance graph()
     install_basic_classes();
     if (semant_debug)
         cout <<  "Num classes: " << classes->len() << endl;
@@ -210,8 +370,12 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) 
         } else 
             ig_nodes[cur->get_name()] = cur;
     }
+    if (!check_inheritance_graph()) return;  // second pass
 
-    check_inheritance_graph();
+    // Part II: add declaration to symbol table; check expression correctness.
+    for (int i = classes->first(); classes->more(i); i = classes->next(i)) {
+        _decl_class(classes->nth(i));
+    }
 }
 
 void ClassTable::install_basic_classes() {

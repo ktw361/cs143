@@ -26,13 +26,15 @@ private:
   int semant_errors;
   void install_basic_classes();
   ostream& error_stream;
-  // Symbol table
+  // TypeEnv
   SymbolTable<Symbol, Symbol> *obj_env;
   SymbolTable<Symbol, Symbol> *method_env;
+  Class_                       cls_env;
+
   // Helper function
   void _decl_class(Class_);
-  void _add_formals(Feature, Class_);
-  void _add_expr(Expression, Class_);
+  void _add_formals(Feature);
+  void typecheck_expr(Expression);
 
   Class_ Object_node;
   std::map<Symbol, Class_> ig_nodes;  // Inheritance Graph nodes

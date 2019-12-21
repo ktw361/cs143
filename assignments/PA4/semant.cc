@@ -232,7 +232,7 @@ bool ClassTable::check_inheritance_graph() {
 }
 
 
-void ClassTable::_add_formals(Feature feat, Class_ cls) {
+void ClassTable::_add_formals(Feature feat) {
     Formals formals = feat->get_formals();
     for (int i = formals->first(); formals->more(i); i = formals->next(i)) {
         Formal form = formals->nth(i);
@@ -241,7 +241,7 @@ void ClassTable::_add_formals(Feature feat, Class_ cls) {
                 << form->get_type() << endl;
         if (!ig_nodes.count(form->get_type())) {
             semant_error();
-            dump_fname_lineno(cerr, cls)
+            dump_fname_lineno(cerr, cls_env)
                 << "Class " << form->get_type()
                 << " of formal paramer " << form->get_name()
                 << " is undefined." << endl;
@@ -250,13 +250,13 @@ void ClassTable::_add_formals(Feature feat, Class_ cls) {
     }
 }
 
-void ClassTable::_add_expr(Expression expr, Class_ cls) {
+void ClassTable::typecheck_expr(Expression expr) {
     if (dynamic_cast<let_class*>(expr)) {
         let_class *e = dynamic_cast<let_class*>(expr);
         obj_env->enterscope();
         if (!ig_nodes.count(e->get_type())) {
             semant_error();
-            dump_fname_lineno(cerr, cls)
+            dump_fname_lineno(cerr, cls_env)
                 << "Class " << e->get_type()
                 << " of let-bound identifier " << e->get_iden()
                 << " is undefined." << endl;
@@ -265,26 +265,26 @@ void ClassTable::_add_expr(Expression expr, Class_ cls) {
 
         // inner scope for init expression
         obj_env->enterscope();
-        _add_expr(e->get_init(), cls);
+        typecheck_expr(e->get_init());
         obj_env->exitscope();
 
-        _add_expr(e->get_body(), cls);
+        typecheck_expr(e->get_body());
         obj_env->exitscope();
     } else if (dynamic_cast<typcase_class*>(expr)) {
         typcase_class *e = dynamic_cast<typcase_class*>(expr);
-        _add_expr(e->get_expr(), cls);
+        typecheck_expr(e->get_expr());
         Cases cases = e->get_cases();
         for (int i = cases->first(); cases->more(i); i = cases->next(i)) {
             Case c = cases->nth(i);
             obj_env->enterscope();
             if (!ig_nodes.count(c->get_type())) {
                 semant_error();
-                dump_fname_lineno(cerr, cls)
+                dump_fname_lineno(cerr, cls_env)
                     << "Class " << c->get_type()
                     << " of case branch is undefined." << endl;
             } else 
                 obj_env->addid(c->get_name(), new Symbol(c->get_type()));
-            _add_expr(c->get_expr(), cls);
+            typecheck_expr(c->get_expr());
             obj_env->exitscope();
         }
     } else if (dynamic_cast<block_class*>(expr)) {
@@ -292,7 +292,7 @@ void ClassTable::_add_expr(Expression expr, Class_ cls) {
         obj_env->enterscope();
         Expressions exprs = e->get_body();
         for (int i = exprs->first(); exprs->more(i); i = exprs->next(i)) {
-            _add_expr(exprs->nth(i), cls);
+            typecheck_expr(exprs->nth(i));
         }
         obj_env->exitscope();
     } else {
@@ -303,6 +303,8 @@ void ClassTable::_add_expr(Expression expr, Class_ cls) {
 void ClassTable::_decl_class(Class_ cls) {
     obj_env->enterscope();
     method_env->enterscope();
+    cls_env = cls;
+
     if (semant_debug)  cout << "Declaring class: " << cls->get_name() << endl;
     Features features = cls->get_features();
     for (int i = features->first(); features->more(i); i = features->next(i)) {
@@ -311,7 +313,7 @@ void ClassTable::_decl_class(Class_ cls) {
         if (f->is_method()) {
             if (semant_debug) cout << "Method: " << name << endl;
             // handle formals
-            _add_formals(f, cls);
+            _add_formals(f);
             // check return type declared
             if (!ig_nodes.count(f->get_type())) {
                 semant_error();
@@ -322,7 +324,7 @@ void ClassTable::_decl_class(Class_ cls) {
                 method_env->addid(name, new Symbol(f->get_type()));
             // handle expressions
             obj_env->enterscope();
-            _add_expr(f->get_expr(), cls);
+            typecheck_expr(f->get_expr());
             obj_env->exitscope();
         } else {
             if (semant_debug) cout << "Attr: " << name << endl;
@@ -337,7 +339,7 @@ void ClassTable::_decl_class(Class_ cls) {
                 obj_env->addid(name, new Symbol(f->get_type()));
             // handle init expressions
             obj_env->enterscope();
-            _add_expr(f->get_expr(), cls);
+            typecheck_expr(f->get_expr());
             obj_env->exitscope();
         }
     }
@@ -350,6 +352,7 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) 
     /* Fill this in */
     obj_env = new SymbolTable<Symbol, Symbol>();
     method_env = new SymbolTable<Symbol, Symbol>();
+    cls_env = NULL;
 
     // Part I: Check inheritance graph()
     install_basic_classes();

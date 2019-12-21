@@ -120,19 +120,13 @@ Expression attr_class::get_expr() { return init; }
 Symbol formal_class::get_name() { return name; }
 Symbol formal_class::get_type() { return type_decl; }
 
-/* Expression_class */
-bool Expression_class::is_let() { return false; }
-bool Expression_class::is_typcase() { return false; }
-
 /* let_class */
-bool let_class::is_let() { return true; }
 Symbol let_class::get_iden() { return identifier; }
 Symbol let_class::get_type() { return type_decl; }
 Expression let_class::get_init() { return init; }
 Expression let_class::get_body() { return body; }
 
 /* typcase_class */
-bool typcase_class::is_typcase() { return true; }
 Expression typcase_class::get_expr() { return expr; }
 Cases typcase_class::get_cases() { return cases; }
 
@@ -140,6 +134,9 @@ Cases typcase_class::get_cases() { return cases; }
 Symbol branch_class::get_name() { return name; }
 Symbol branch_class::get_type() { return type_decl; }
 Expression branch_class::get_expr() { return expr; }
+
+/* block_class */
+Expressions block_class::get_body() { return body; }
 
 /**** end of implementation in cool-tree.h ****/
 
@@ -239,20 +236,22 @@ void ClassTable::_add_formals(Feature feat, Class_ cls) {
     Formals formals = feat->get_formals();
     for (int i = formals->first(); formals->more(i); i = formals->next(i)) {
         Formal form = formals->nth(i);
+        if (semant_debug)
+            cout << " Formal: " << form->get_name() << ", type: "
+                << form->get_type() << endl;
         if (!ig_nodes.count(form->get_type())) {
             semant_error();
             dump_fname_lineno(cerr, cls)
                 << "Class " << form->get_type()
                 << " of formal paramer " << form->get_name()
                 << " is undefined." << endl;
-            continue;
-        }
-        obj_env->addid(form->get_name(), new Symbol(form->get_type()));
+        } else 
+            obj_env->addid(form->get_name(), new Symbol(form->get_type()));
     }
 }
 
 void ClassTable::_add_expr(Expression expr, Class_ cls) {
-    if (expr->is_let()) {
+    if (dynamic_cast<let_class*>(expr)) {
         let_class *e = dynamic_cast<let_class*>(expr);
         obj_env->enterscope();
         if (!ig_nodes.count(e->get_type())) {
@@ -261,10 +260,8 @@ void ClassTable::_add_expr(Expression expr, Class_ cls) {
                 << "Class " << e->get_type()
                 << " of let-bound identifier " << e->get_iden()
                 << " is undefined." << endl;
-            obj_env->exitscope();
-            return;
-        }
-        obj_env->addid(e->get_iden(), new Symbol(e->get_type()));
+        } else 
+            obj_env->addid(e->get_iden(), new Symbol(e->get_type()));
 
         // inner scope for init expression
         obj_env->enterscope();
@@ -273,7 +270,7 @@ void ClassTable::_add_expr(Expression expr, Class_ cls) {
 
         _add_expr(e->get_body(), cls);
         obj_env->exitscope();
-    } else if (expr->is_typcase()) {
+    } else if (dynamic_cast<typcase_class*>(expr)) {
         typcase_class *e = dynamic_cast<typcase_class*>(expr);
         _add_expr(e->get_expr(), cls);
         Cases cases = e->get_cases();
@@ -284,14 +281,20 @@ void ClassTable::_add_expr(Expression expr, Class_ cls) {
                 semant_error();
                 dump_fname_lineno(cerr, cls)
                     << "Class " << c->get_type()
-                    << " of case branch if undefined." << endl;
-                obj_env->exitscope();
-                continue;
-            }
-            obj_env->addid(c->get_name(), new Symbol(c->get_type()));
+                    << " of case branch is undefined." << endl;
+            } else 
+                obj_env->addid(c->get_name(), new Symbol(c->get_type()));
             _add_expr(c->get_expr(), cls);
             obj_env->exitscope();
         }
+    } else if (dynamic_cast<block_class*>(expr)) {
+        block_class *e = dynamic_cast<block_class*>(expr);
+        obj_env->enterscope();
+        Expressions exprs = e->get_body();
+        for (int i = exprs->first(); exprs->more(i); i = exprs->next(i)) {
+            _add_expr(exprs->nth(i), cls);
+        }
+        obj_env->exitscope();
     } else {
         ;
     }
@@ -307,17 +310,16 @@ void ClassTable::_decl_class(Class_ cls) {
         Symbol name = f->get_name();
         if (f->is_method()) {
             if (semant_debug) cout << "Method: " << name << endl;
+            // handle formals
+            _add_formals(f, cls);
             // check return type declared
             if (!ig_nodes.count(f->get_type())) {
                 semant_error();
                 dump_fname_lineno(cerr, cls)
                     << "Undefined return type " << f->get_type()
                     << " in method " << name << "." << endl;
-                continue;
-            }
-            method_env->addid(name, new Symbol(f->get_type()));
-            // handle formals
-            _add_formals(f, cls);
+            } else 
+                method_env->addid(name, new Symbol(f->get_type()));
             // handle expressions
             obj_env->enterscope();
             _add_expr(f->get_expr(), cls);
@@ -331,9 +333,8 @@ void ClassTable::_decl_class(Class_ cls) {
                     << "Class " << f->get_type()
                     << " of attribute " << name
                     << " is undefined." << endl;
-                continue;
-            }
-            obj_env->addid(name, new Symbol(f->get_type()));
+            } else 
+                obj_env->addid(name, new Symbol(f->get_type()));
             // handle init expressions
             obj_env->enterscope();
             _add_expr(f->get_expr(), cls);

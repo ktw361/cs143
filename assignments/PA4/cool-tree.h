@@ -94,9 +94,6 @@ class Expression_class : public tree_node {
 public:
    tree_node *copy()		 { return copy_Expression(); }
    virtual Expression copy_Expression() = 0;
-   // Semant
-   virtual bool is_let();
-   virtual bool is_typcase();
 
 #ifdef Expression_EXTRAS
    Expression_EXTRAS
@@ -448,7 +445,6 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
    // Semant
-   bool is_typcase();
    Expression get_expr();
    Cases get_cases();
 
@@ -471,6 +467,8 @@ public:
    }
    Expression copy_Expression();
    void dump(ostream& stream, int n);
+   // Semant
+   Expressions get_body();
 
 #ifdef Expression_SHARED_EXTRAS
    Expression_SHARED_EXTRAS
@@ -498,7 +496,6 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
    // Semant
-   bool is_let();
    Symbol get_iden();
    Symbol get_type();
    Expression get_init();

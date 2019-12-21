@@ -27,18 +27,23 @@ private:
   void install_basic_classes();
   ostream& error_stream;
   // TypeEnv
-  SymbolTable<Symbol, Symbol> *obj_env;
-  SymbolTable<Symbol, Symbol> *method_env;
-  Class_                       cls_env;
+  typedef SymbolTable<Symbol, Symbol> EnvType;
+  EnvType *obj_env;
+  EnvType *method_env;
+  Class_   cls_env;
 
   // Helper function
   void _decl_class(Class_);
   void _add_formals(Feature);
-  void typecheck_expr(Expression);
+  // Type cheker
+  Symbol typecheck_expr(Expression);
+  Symbol typecheck_assign(Symbol, Expression);
 
-  Class_ Object_node;
-  std::map<Symbol, Class_> ig_nodes;  // Inheritance Graph nodes
+  Class_ Object_node;  // Root of inheritance tree
+  std::map<Symbol, Class_> ig_nodes;    // Inheritance Graph nodes
   bool check_inheritance_graph();
+  bool conform(Symbol, Symbol);         // type conformance
+  Symbol lub(Symbol, Symbol);           // least upper bound
 
 public:
   ClassTable(Classes);

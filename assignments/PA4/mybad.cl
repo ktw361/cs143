@@ -1,17 +1,24 @@
-class A  {};
+class F1 {};
+class F2 inherits F1 {};
+class FF inherits F2 {};
+class A  inherits F1 {};
+
 class C {
-	a : Int;
+	a : Intt <- new As;
 	b : Bool;
-	init(x : Int, y : Booll) : Css{
-           {
-        let x : Intt in 5;
+    t1 : F2;
+	init(x : Int, y : Bool) : Objectt{
+        {
+        t1 <- new F1;
+        t1 <- new A;
+        let x : Int in 5;
         case a of 
-            a1 : Int2 => 5;
+            a1 : Int => 5;
         esac;
-		a <- x;
+		a2 <- x;
 		b <- y;
 		self;
-           }
+        }
 	};
 };
 

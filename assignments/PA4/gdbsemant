@@ -1,0 +1,4 @@
+#!/bin/csh -f
+./lexer $* | ./parser $* > /tmp/out.dump 
+gdb semant
+# ./lexer $* | ./parser $* | ./semant $* 

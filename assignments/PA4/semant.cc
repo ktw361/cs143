@@ -231,6 +231,47 @@ bool ClassTable::check_inheritance_graph() {
     return flag;
 }
 
+bool ClassTable::conform(Symbol lhs, Symbol rhs) {
+    if (lhs == rhs) return true;
+    if (lhs == SELF_TYPE) return conform(cls_env->get_name(), rhs);
+    if (rhs == SELF_TYPE) return false;
+
+    Class_ c_lhs = ig_nodes[lhs];
+    while(c_lhs->get_name() != rhs && c_lhs->get_name() != Object) {
+        c_lhs = ig_nodes[c_lhs->get_parent()];
+    }
+    return (c_lhs->get_name() == rhs) ? true : false;
+}
+
+Symbol ClassTable::lub(Symbol a, Symbol b) {
+    if (a == b) return a;
+    if (a == SELF_TYPE) return lub(cls_env->get_name(), b);
+    if (b == SELF_TYPE) return lub(a, cls_env->get_name());
+
+    List<Symbol> *list_a = NULL, *list_b = NULL;
+    Class_ c = ig_nodes[a];
+    while(c->get_name() != Object) {
+        list_a = new List<Symbol>(new Symbol(c->get_name()), list_a);
+        c = ig_nodes[c->get_parent()];
+    }
+    list_a = new List<Symbol>(new Symbol(Object), list_a);
+    c = ig_nodes[b];
+    while(c->get_name() != Object) {
+        list_b = new List<Symbol>(new Symbol(c->get_name()), list_b);
+        c = ig_nodes[c->get_parent()];
+    }
+    list_b = new List<Symbol>(new Symbol(Object), list_b);
+
+    Symbol ret;
+    for (;
+            list_a != NULL && list_b != NULL; 
+            list_a = list_a->tl(), list_b = list_b->tl()
+            ) {
+        if (*list_a->hd() == *list_b->hd())
+            ret = *list_a->hd();
+    }
+    return ret;
+}
 
 void ClassTable::_add_formals(Feature feat) {
     Formals formals = feat->get_formals();
@@ -250,9 +291,35 @@ void ClassTable::_add_formals(Feature feat) {
     }
 }
 
-void ClassTable::typecheck_expr(Expression expr) {
+Symbol ClassTable::typecheck_assign(Symbol id, Expression e) {
+    Symbol e_type = typecheck_expr(e);
+    // Note the verification of id's type is done by caller.
+    Symbol T;
+    if ((T = *obj_env->lookup(id)) == NULL) {
+        dump_fname_lineno(cerr, cls_env)
+            << "Assignment to undeclared variable "
+            << id << "." << endl;
+        return Object;
+    } 
+    // TODO
+    if (!(e_type <= T)) {
+        dump_fname_lineno(cerr, cls_env)
+            << "Type " << e_type << " of assigned expression does not"
+            << " conform to declared type " << T 
+            << " of identifier " << id << "." << endl;
+        return Object;
+    }
+    return e_type;
+}
+
+Symbol ClassTable::typecheck_expr(Expression expr) {
     if (dynamic_cast<let_class*>(expr)) {
         let_class *e = dynamic_cast<let_class*>(expr);
+        obj_env->enterscope();
+        // First check init expr without definition of new identifier
+        Symbol init_type = typecheck_expr(e->get_init());
+
+        // Then add new identifier and check body
         obj_env->enterscope();
         if (!ig_nodes.count(e->get_type())) {
             semant_error();
@@ -262,13 +329,9 @@ void ClassTable::typecheck_expr(Expression expr) {
                 << " is undefined." << endl;
         } else 
             obj_env->addid(e->get_iden(), new Symbol(e->get_type()));
-
-        // inner scope for init expression
-        obj_env->enterscope();
-        typecheck_expr(e->get_init());
+        Symbol body_type = typecheck_expr(e->get_body());
         obj_env->exitscope();
 
-        typecheck_expr(e->get_body());
         obj_env->exitscope();
     } else if (dynamic_cast<typcase_class*>(expr)) {
         typcase_class *e = dynamic_cast<typcase_class*>(expr);
@@ -314,32 +377,36 @@ void ClassTable::_decl_class(Class_ cls) {
             if (semant_debug) cout << "Method: " << name << endl;
             // handle formals
             _add_formals(f);
-            // check return type declared
-            if (!ig_nodes.count(f->get_type())) {
+            // check return type defined
+            bool defined = ig_nodes.count(f->get_type());
+            if (!defined) {
                 semant_error();
                 dump_fname_lineno(cerr, cls)
                     << "Undefined return type " << f->get_type()
                     << " in method " << name << "." << endl;
-            } else 
-                method_env->addid(name, new Symbol(f->get_type()));
+            } 
             // handle expressions
             obj_env->enterscope();
             typecheck_expr(f->get_expr());
             obj_env->exitscope();
+            if (defined)
+                method_env->addid(name, new Symbol(f->get_type()));
         } else {
             if (semant_debug) cout << "Attr: " << name << endl;
-            // check attr type declared
-            if (!ig_nodes.count(f->get_type())) {
+            // check attr type defined
+            bool defined = ig_nodes.count(f->get_type());
+            if (!defined) {
                 semant_error();
                 dump_fname_lineno(cerr, cls)
                     << "Class " << f->get_type()
                     << " of attribute " << name
                     << " is undefined." << endl;
-            } else 
+                obj_env->addid(name, new Symbol(Object));
+            } else
                 obj_env->addid(name, new Symbol(f->get_type()));
             // handle init expressions
             obj_env->enterscope();
-            typecheck_expr(f->get_expr());
+            typecheck_assign(f->get_name(), f->get_expr());
             obj_env->exitscope();
         }
     }
@@ -376,10 +443,27 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) 
     }
     if (!check_inheritance_graph()) return;  // second pass
 
+    Symbol F2 = idtable.add_string("F2");
+    Symbol FF = idtable.add_string("FF");
+    Symbol C = idtable.add_string("C");
+    Symbol A = idtable.add_string("A");
+    Symbol F1 = idtable.add_string("F1");
+    cout << conform(Int, Object) 
+        << conform(Object, Object) 
+        << conform(F2, Object) 
+        << conform(F2, F1)
+        << conform(F1, F2)
+        << conform(F1, C)
+        << conform(F2, C) << endl;
+    cout << lub(Object, Object) << endl
+        << lub(Int, Bool) << endl
+        << lub(F1, F2) << endl
+        << lub(FF, A) << endl;
+        
     // Part II: add declaration to symbol table; check expression correctness.
-    for (int i = classes->first(); classes->more(i); i = classes->next(i)) {
-        _decl_class(classes->nth(i));
-    }
+    /* for (int i = classes->first(); classes->more(i); i = classes->next(i)) { */
+    /*     _decl_class(classes->nth(i)); */
+    /* } */
 }
 
 void ClassTable::install_basic_classes() {

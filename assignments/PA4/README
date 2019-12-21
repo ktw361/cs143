@@ -182,6 +182,9 @@ any node not connected to Object is in cyclic dependency.
 3. We use direct comparison on Symbol (address comparison),
 Symbol is a pointer(address), but also act as an unique id.
 
+4. obj_env Map: id(Symbol) -> type(Symbol); 
+   ig_nodes Map: type(Symbol) -> Class_
+
 
 1. What requirements do I need to check?
 

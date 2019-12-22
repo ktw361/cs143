@@ -4,6 +4,7 @@
 grading/
 .tags
 .gdb_history
+.DS_Store
 
 # PA1
 lexer

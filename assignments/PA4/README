@@ -185,6 +185,13 @@ Symbol is a pointer(address), but also act as an unique id.
 4. obj_env Map: id(Symbol) -> type(Symbol); 
    ig_nodes Map: type(Symbol) -> Class_
 
+5. About passes
+ 1st pass: gather class inheritance graph and check well-formed
+ 2nd pass: gather method_env, check formals
+ 3rd pass: TODO
+
+6. in cool lang, all method are virtual.
+
 
 1. What requirements do I need to check?
 

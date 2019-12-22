@@ -1,3 +1,18 @@
+class C{
+ x:Bool;
+ main(): Object {{ 
+                  ~7; ~foo();
+                }};
+ foo(): Int {4};
+};
+class Main inherits IO{
+ x:Bool;
+ main(): Object {{ 
+                  ~7; ~foo();
+                }};
+ foo(): Int {4};
+};
+
 -- class Main inherits IO{
 --  x: Int;
 --  y: String;
@@ -10,14 +25,7 @@
 -- class Foo {
 --  x:Int <- 3;
 -- };
-class Main {
- main(): Object {{
-     5.copy(); 
-     "test".copy(); 
-     true.copy(); 
-    "test".length(); 
-    } };
-};
+
 -- class C {
 -- 	a : Int;
 -- 	b : Bool;

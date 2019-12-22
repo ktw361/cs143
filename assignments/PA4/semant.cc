@@ -240,7 +240,7 @@ Symbol ClassTable::typecheck_expr(Expression expr) {
 		ret = typecheck_block(expr);
 	} else if (dynamic_cast<let_class*>(expr)) {
 		ret = typecheck_let(expr);
-	} else if (dynamic_cast<Case_class*>(expr)) {
+	} else if (dynamic_cast<typcase_class*>(expr)) {
 		ret = typecheck_case(expr);
 	} else if (dynamic_cast<loop_class*>(expr)) {
 		ret = typecheck_loop(expr);
@@ -283,7 +283,7 @@ Symbol ClassTable::typecheck_var(Expression expr) {
             << "Undeclared identifier " << s << "." << endl;
         return Object;
     }
-    expr->set_type(*pT);
+    expr->set_type((*pT == SELF_TYPE ) ? cls_env->get_name() : *pT);
     return *pT;
 }
 
@@ -302,7 +302,7 @@ Symbol ClassTable::typecheck_assign(Expression expr) {
 
     Expression e1 = e->get_expr();
     Symbol T1 = typecheck_expr(e1);
-    if (!conform(T, T1)) {
+    if (!conform(T1, T)) {
         semant_error();
         // TODO
         dump_fname_lineno(cerr, cls_env)
@@ -311,7 +311,7 @@ Symbol ClassTable::typecheck_assign(Expression expr) {
             << " of identifier " << id << "." << endl;
         return Object;
     }
-    expr->set_type(T1);
+    expr->set_type(T1 == SELF_TYPE ? cls_env->get_name() : T1);
     return T1;
 }
 
@@ -395,7 +395,7 @@ Symbol ClassTable::typecheck_dispatch(Expression expr) {
     T_ret = (T_ret == SELF_TYPE) ? T0 : T_ret;
     if (semant_debug)
         cout << T_ret << endl;
-    expr->set_type(T_ret);
+    expr->set_type(T_ret == SELF_TYPE ? cls_env->get_name() : T_ret);
     return T_ret;
 }
 
@@ -456,7 +456,7 @@ Symbol ClassTable::typecheck_static_dispatch(Expression expr) {
     T_ret = (T_ret == SELF_TYPE) ? T0 : T_ret;
     if (semant_debug)
         cout << T_ret << endl;
-    expr->set_type(T_ret);
+    expr->set_type(T_ret == SELF_TYPE ? cls_env->get_name() : T_ret);
     return T_ret;
 }
 
@@ -472,7 +472,7 @@ Symbol ClassTable::typecheck_cond(Expression expr) {
             << T1 << ")." << endl;
         return Object;
     }
-    expr->set_type(lub(T2, T2));
+    expr->set_type(lub(T2, T2)); // TODO
     return expr->get_type();
 }
 
@@ -485,7 +485,7 @@ Symbol ClassTable::typecheck_block(Expression expr) {
         T_tmp = typecheck_expr(exprs->nth(i));
     }
     obj_env.exitscope();
-    expr->set_type(T_tmp);
+    expr->set_type(T_tmp == SELF_TYPE ? cls_env->get_name() : T_tmp);
     return T_tmp;
 }
 
@@ -510,7 +510,7 @@ Symbol ClassTable::typecheck_let(Expression expr) {
         Symbol body_type = typecheck_expr(e->get_body());
         obj_env.exitscope();
         init_expr->set_type(No_type);
-        expr->set_type(body_type);
+        expr->set_type(body_type == SELF_TYPE ? cls_env->get_name() : body_type);
         return body_type;
     }
 
@@ -524,7 +524,7 @@ Symbol ClassTable::typecheck_let(Expression expr) {
     obj_env.addid(e->get_iden(), new Symbol(T0));
     Symbol body_type = typecheck_expr(e->get_body());
     obj_env.exitscope();
-    expr->set_type(body_type);
+    expr->set_type(body_type == SELF_TYPE ? cls_env->get_name() : body_type);
     return body_type;
 }
 
@@ -557,7 +557,7 @@ Symbol ClassTable::typecheck_case(Expression expr) {
         T_ret = (i == cases->first()) ? Ti : lub(Ti, T_ret);
         obj_env.exitscope();
     }
-    expr->set_type(T_ret);
+    expr->set_type(T_ret == SELF_TYPE ? cls_env->get_name() : T_ret);
     return T_ret;
 }
 
@@ -622,7 +622,7 @@ Symbol ClassTable::typecheck_compare(Expression expr) {
 Symbol ClassTable::typecheck_neg(Expression expr) {
     neg_class *e = dynamic_cast<neg_class*>(expr);
     Symbol T0 = typecheck_expr(e->get_expr());
-    if (T0 != Bool) {
+    if (T0 != Int) {
         semant_error();
         dump_fname_lineno(cerr, cls_env)
             << "Argument of '~' has type " << T0
@@ -715,6 +715,14 @@ void ClassTable::typecheck_attr(Feature feat) {
             << "'self' cannot be the name of an attribute." << endl;
         return;
     }
+    // check overwrite parent attribute
+    if (obj_env.lookup(name)) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << " Attribute " << name 
+            << " is an attribute of an inherited class." << endl;
+        return;
+    }
     // check attr type defined
     if (!ig_nodes.count(type_decl)) {
         semant_error();
@@ -725,7 +733,6 @@ void ClassTable::typecheck_attr(Feature feat) {
         obj_env.addid(name, new Symbol(Object));
     } else {
         obj_env.addid(name, new Symbol(type_decl));
-        // type check attr
         if (dynamic_cast<no_expr_class*>(init)) {
             init->set_type(No_type);
         } else {
@@ -877,6 +884,13 @@ int ClassTable::_add_formal_signatures(Feature feat) {
         if (semant_debug)
             cout << " Check Formal signature: " << form->get_name() << ", type: "
                 << form->get_type() << endl;
+        // 'self' as formal name
+        if (form->get_name() == self) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "'self' cannot be the name of a formal parameter" << endl;
+        }
+        // Undefined formal type
         if (!ig_nodes.count(form->get_type())) {
             semant_error();
             dump_fname_lineno(cerr, cls_env)

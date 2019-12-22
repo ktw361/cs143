@@ -22,7 +22,7 @@ class C {
         -- t1 <- new A;
         let x : Int in 5;
         case a of
-        a1 : Int => a1;
+        self : Int => a1;
         a2 : Int => a2;
         esac;
         while a

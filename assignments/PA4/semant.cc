@@ -283,7 +283,7 @@ Symbol ClassTable::typecheck_var(Expression expr) {
             << "Undeclared identifier " << s << "." << endl;
         return Object;
     }
-    expr->set_type((*pT == SELF_TYPE ) ? cls_env->get_name() : *pT);
+    expr->set_type(*pT);
     return *pT;
 }
 
@@ -311,7 +311,7 @@ Symbol ClassTable::typecheck_assign(Expression expr) {
             << " of identifier " << id << "." << endl;
         return Object;
     }
-    expr->set_type(T1 == SELF_TYPE ? cls_env->get_name() : T1);
+    expr->set_type(T1);
     return T1;
 }
 
@@ -340,7 +340,7 @@ Symbol ClassTable::typecheck_new(Expression expr) {
             << T << ".\n";
         return Object;
     }
-    expr->set_type(T == SELF_TYPE ? SELF_TYPE : T);
+    expr->set_type(T);
     return expr->get_type();
 }
 
@@ -395,7 +395,7 @@ Symbol ClassTable::typecheck_dispatch(Expression expr) {
     T_ret = (T_ret == SELF_TYPE) ? T0 : T_ret;
     if (semant_debug)
         cout << T_ret << endl;
-    expr->set_type(T_ret == SELF_TYPE ? cls_env->get_name() : T_ret);
+    expr->set_type(T_ret);
     return T_ret;
 }
 
@@ -456,7 +456,7 @@ Symbol ClassTable::typecheck_static_dispatch(Expression expr) {
     T_ret = (T_ret == SELF_TYPE) ? T0 : T_ret;
     if (semant_debug)
         cout << T_ret << endl;
-    expr->set_type(T_ret == SELF_TYPE ? cls_env->get_name() : T_ret);
+    expr->set_type(T_ret);
     return T_ret;
 }
 
@@ -472,7 +472,7 @@ Symbol ClassTable::typecheck_cond(Expression expr) {
             << T1 << ")." << endl;
         return Object;
     }
-    expr->set_type(lub(T2, T2)); // TODO
+    expr->set_type(lub(T2, T3)); // TODO
     return expr->get_type();
 }
 
@@ -485,7 +485,7 @@ Symbol ClassTable::typecheck_block(Expression expr) {
         T_tmp = typecheck_expr(exprs->nth(i));
     }
     obj_env.exitscope();
-    expr->set_type(T_tmp == SELF_TYPE ? cls_env->get_name() : T_tmp);
+    expr->set_type(T_tmp);
     return T_tmp;
 }
 
@@ -506,11 +506,17 @@ Symbol ClassTable::typecheck_let(Expression expr) {
     // Let-No-Init
     if (dynamic_cast<no_expr_class*>(init_expr)) {
         obj_env.enterscope();
+        if (e->get_iden() == self) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "'self' cannot be bound in a 'let' expression." << endl;
+            return Object;
+        }
         obj_env.addid(e->get_iden(), new Symbol(T0));
         Symbol body_type = typecheck_expr(e->get_body());
         obj_env.exitscope();
         init_expr->set_type(No_type);
-        expr->set_type(body_type == SELF_TYPE ? cls_env->get_name() : body_type);
+        expr->set_type(body_type);
         return body_type;
     }
 
@@ -524,7 +530,7 @@ Symbol ClassTable::typecheck_let(Expression expr) {
     obj_env.addid(e->get_iden(), new Symbol(T0));
     Symbol body_type = typecheck_expr(e->get_body());
     obj_env.exitscope();
-    expr->set_type(body_type == SELF_TYPE ? cls_env->get_name() : body_type);
+    expr->set_type(body_type);
     return body_type;
 }
 
@@ -549,6 +555,11 @@ Symbol ClassTable::typecheck_case(Expression expr) {
                 << "Duplicate branch " << c->get_type()
                 << " in case statement." << endl;
             return Object;
+        } else if (c->get_name() == self) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "'self' bound in 'case'." << endl;
+            return Object;
         } else {
             case_cache[c->get_type()] = true;
             obj_env.addid(c->get_name(), new Symbol(c->get_type()));
@@ -557,7 +568,7 @@ Symbol ClassTable::typecheck_case(Expression expr) {
         T_ret = (i == cases->first()) ? Ti : lub(Ti, T_ret);
         obj_env.exitscope();
     }
-    expr->set_type(T_ret == SELF_TYPE ? cls_env->get_name() : T_ret);
+    expr->set_type(T_ret);
     return T_ret;
 }
 

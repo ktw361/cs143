@@ -5,6 +5,7 @@ class A  inherits F1 {};
 
 class C {
 	a : Int;
+	self : Int;
 	b : Bool;
     t1 : F2;
 	init(x : Int, y : Bool) : Int {
@@ -43,7 +44,11 @@ class C {
 	};
 };
 
-class C1 inherits C {};
+class C1 inherits C {
+    init(x:Int , y:Bool) :Int {
+        new Int
+    };
+};
 
 Class Main {
 	main():C {

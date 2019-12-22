@@ -265,13 +265,12 @@ Symbol ClassTable::typecheck_expr(Expression expr) {
 	} else if (dynamic_cast<eq_class*>(expr)) {
 		ret = typecheck_equal(expr);
 	} else {
-        ;
+        semant_error();
+        dump_fname_lineno(cerr, cls_env) 
+            << "Fatal Error: Expression type not found.";
+        return Object;
     }
-    // TODO delete this
-    /* semant_error(); */
-    /* dump_fname_lineno(cerr, cls_env) */ 
-    /*     << "Expression not found, Fall through"; */
-    return ret; // TODO delete?
+    return ret;
 }
 
 Symbol ClassTable::typecheck_var(Expression expr) {
@@ -284,6 +283,7 @@ Symbol ClassTable::typecheck_var(Expression expr) {
             << "Undeclared identifier " << s << "." << endl;
         return Object;
     }
+    expr->set_type(*pT);
     return *pT;
 }
 
@@ -311,28 +311,30 @@ Symbol ClassTable::typecheck_assign(Expression expr) {
             << " of identifier " << id << "." << endl;
         return Object;
     }
+    expr->set_type(T1);
     return T1;
 }
 
 Symbol ClassTable::typecheck_bool(Expression expr) {
+    expr->set_type(Bool);
     return Bool;
 }
 
 Symbol ClassTable::typecheck_int(Expression expr) {
+    expr->set_type(Int);
     return Int;
 }
 
 Symbol ClassTable::typecheck_string(Expression expr) {
+    expr->set_type(Str);
     return Str;
 }
 
 Symbol ClassTable::typecheck_new(Expression expr) {
     new__class *e = dynamic_cast<new__class*>(expr);
     Symbol T = e->get_type();
-    if (T == SELF_TYPE)
-        return SELF_TYPE;
-    else
-        return T;
+    expr->set_type(T == SELF_TYPE ? SELF_TYPE : T);
+    return expr->get_type();
 }
 
 Symbol ClassTable::typecheck_dispatch(Expression expr) {
@@ -376,8 +378,9 @@ Symbol ClassTable::typecheck_dispatch(Expression expr) {
             return Object;
         }
     }
-    Symbol T_ret = signatures[actual->len()+1];
+    Symbol T_ret = signatures[actual->len()];
     T_ret = (T_ret == SELF_TYPE) ? T0 : T_ret;
+    expr->set_type(T_ret);
     return T_ret;
 }
 
@@ -432,6 +435,7 @@ Symbol ClassTable::typecheck_static_dispatch(Expression expr) {
     }
     Symbol T_ret = signatures[actual->len()+1];
     T_ret = (T_ret == SELF_TYPE) ? T0 : T_ret;
+    expr->set_type(T_ret);
     return T_ret;
 }
 
@@ -447,7 +451,8 @@ Symbol ClassTable::typecheck_cond(Expression expr) {
             << T1 << ")." << endl;
         return Object;
     }
-    return lub(T2, T3);
+    expr->set_type(lub(T2, T2));
+    return expr->get_type();
 }
 
 Symbol ClassTable::typecheck_block(Expression expr) {
@@ -482,6 +487,8 @@ Symbol ClassTable::typecheck_let(Expression expr) {
         obj_env.addid(e->get_iden(), new Symbol(T0));
         Symbol body_type = typecheck_expr(e->get_body());
         obj_env.exitscope();
+        init_expr->set_type(No_type);
+        expr->set_type(body_type);
         return body_type;
     }
 
@@ -495,6 +502,7 @@ Symbol ClassTable::typecheck_let(Expression expr) {
     obj_env.addid(e->get_iden(), new Symbol(T0));
     Symbol body_type = typecheck_expr(e->get_body());
     obj_env.exitscope();
+    expr->set_type(body_type);
     return body_type;
 }
 
@@ -527,6 +535,7 @@ Symbol ClassTable::typecheck_case(Expression expr) {
         T_ret = (i == cases->first()) ? Ti : lub(Ti, T_ret);
         obj_env.exitscope();
     }
+    expr->set_type(T_ret);
     return T_ret;
 }
 
@@ -539,12 +548,14 @@ Symbol ClassTable::typecheck_loop(Expression expr) {
         return Object;
     }
     typecheck_expr(e->get_body());
+    expr->set_type(Object);
     return Object;
 }
 
 Symbol ClassTable::typecheck_isvoid(Expression expr) {
     isvoid_class *e = dynamic_cast<isvoid_class*>(expr);
     typecheck_expr(e->get_expr());
+    expr->set_type(Bool);
     return Bool;
 }
 
@@ -558,6 +569,7 @@ Symbol ClassTable::typecheck_comp(Expression expr) {
             << " instead of Bool." << endl;
         return Object;
     }
+    expr->set_type(Bool);
     return Bool;
 }
 
@@ -581,6 +593,7 @@ Symbol ClassTable::typecheck_compare(Expression expr) {
             << (is_lt ? " < " : " <= ") << T_rhs << endl;
         return Object;
     }
+    expr->set_type(Bool);
     return Bool;
 }
 
@@ -594,7 +607,8 @@ Symbol ClassTable::typecheck_neg(Expression expr) {
             << " instead of Int." << endl;
         return Object;
     }
-    return Bool;
+    expr->set_type(Int);
+    return Int;
 }
 
 Symbol ClassTable::typecheck_arith(Expression expr) {
@@ -628,6 +642,7 @@ Symbol ClassTable::typecheck_arith(Expression expr) {
             << T1 << display << T2 << endl;
         return Object;
     }
+    expr->set_type(Int);
     return Int;
 }
 
@@ -654,7 +669,72 @@ Symbol ClassTable::typecheck_equal(Expression expr) {
             return Object;
         }
     }
+    expr->set_type(Bool);
     return Bool;
+}
+
+void ClassTable::typecheck_method(Feature feat) {
+    if (semant_debug) cout << "Method: " << cls_env->get_name() << endl;
+    MtdKeyType key = std::make_pair(cls_env->get_name(), feat->get_name());
+    method_env[key] = new MtdValType();
+    MtdValType signatures = *method_env[key];
+    // handle formals
+    int num_formals = _add_formal_signatures(feat);
+    // check method return type defined
+    if (feat->get_type() == SELF_TYPE)
+        signatures[num_formals] = SELF_TYPE;
+    else if (!ig_nodes.count(feat->get_type())) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Undefined return type " << feat->get_type()   
+            << " in method " << feat->get_name() << "." << endl;
+        signatures[num_formals] = Object;
+    } else 
+        signatures[num_formals] = feat->get_type();
+}
+
+void ClassTable::typecheck_attr(Feature feat) {
+    if (semant_debug) cout << "Attr: " << feat->get_name() << endl;
+    Symbol name = feat->get_name();
+    Symbol type_decl = feat->get_type();
+    Expression init = feat->get_expr();
+    // check 'self'
+    if (name == self) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "'self' cannot be the name of an attribute." << endl;
+        return;
+    }
+    // check attr type defined
+    if (!ig_nodes.count(type_decl)) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Class " << type_decl
+            << " of attribute " << name
+            << " is undefined." << endl;
+        obj_env.addid(name, new Symbol(Object));
+    } else {
+        obj_env.addid(name, new Symbol(type_decl));
+        // type check attr
+        if (dynamic_cast<no_expr_class*>(init)) {
+            init->set_type(No_type);
+        } else {
+            // handle attr init expressions
+            obj_env.enterscope();
+            Symbol T0 = type_decl;
+            obj_env.addid(self, new Symbol(SELF_TYPE));
+            Symbol T1 = typecheck_expr(init);
+            if (!conform(T1, T0)) {
+                semant_error();
+                dump_fname_lineno(cerr, cls_env)
+                    << "Inferred type " << T1
+                    << " of initialization of attribute " << name
+                    << " does not conform to declared type " 
+                    << T0 << "." << endl;
+            }
+            obj_env.exitscope();
+        }
+    }
 }
 
 /*** end of type checker ***/
@@ -793,6 +873,7 @@ int ClassTable::_add_formal_signatures(Feature feat) {
         } else 
             signatures[i] = form->get_type();
     }
+    signatures[formals->len()] = feat->get_type();
     signatures[NUM_FORMALS] = reinterpret_cast<Symbol>(new int(formals->len()));  
     return formals->len();
 }
@@ -838,57 +919,10 @@ void ClassTable::_decl_class(Class_ cls) {
     for (int i = features->first(); features->more(i); i = features->next(i)) {
         Feature f = features->nth(i);
         Symbol name = f->get_name();
-        if (f->is_method()) {
-            if (semant_debug) cout << "Method: " << name << endl;
-            MtdKeyType key = std::make_pair(cls_env->get_name(), f->get_name());
-            method_env[key] = new MtdValType();
-            MtdValType signatures = *method_env[key];
-            // handle formals
-            int num_formals = _add_formal_signatures(f);
-            // check method return type defined
-            if (f->get_type() == SELF_TYPE)
-                signatures[num_formals] = SELF_TYPE;
-            else if (!ig_nodes.count(f->get_type())) {
-                semant_error();
-                dump_fname_lineno(cerr, cls)
-                    << "Undefined return type " << f->get_type()   
-                    << " in method " << name << "." << endl;
-                signatures[num_formals] = Object;
-            } else 
-                signatures[num_formals] = f->get_type();
-        } else {
-            if (semant_debug) cout << "Attr: " << name << endl;
-            // check attr type defined
-            if (!ig_nodes.count(f->get_type())) {
-                semant_error();
-                dump_fname_lineno(cerr, cls)
-                    << "Class " << f->get_type()
-                    << " of attribute " << name
-                    << " is undefined." << endl;
-                obj_env.addid(name, new Symbol(Object));
-            } else {
-                obj_env.addid(name, new Symbol(f->get_type()));
-                // type check attr
-                if (dynamic_cast<no_expr_class*>(f->get_expr())) {
-                    ;
-                } else {
-                    // handle attr init expressions
-                    obj_env.enterscope();
-                    Symbol T0 = f->get_type();
-                    obj_env.addid(self, new Symbol(SELF_TYPE));
-                    Symbol T1 = typecheck_expr(f->get_expr());
-                    if (!conform(T1, T0)) {
-                        semant_error();
-                        dump_fname_lineno(cerr, cls)
-                            << "Inferred type " << T1
-                            << " of initialization of attribute " << f->get_name()
-                            << " does not conform to declared type " 
-                            << T0 << "." << endl;
-                    }
-                    obj_env.exitscope();
-                }
-            }
-        }
+        if (f->is_method())
+            typecheck_method(f);
+        else
+            typecheck_attr(f);
     }
 
     // Then, dfs step, add sub class method signature / attrs / attr-expr

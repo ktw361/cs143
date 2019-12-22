@@ -69,6 +69,8 @@ private:
   Symbol typecheck_neg(Expression);
   Symbol typecheck_arith(Expression);
   Symbol typecheck_equal(Expression);
+  void typecheck_method(Feature);
+  void typecheck_attr(Feature);
 
   Class_ Object_node;                   // Root of inheritance tree
   Symbol *prim_types;                   // Primitive types

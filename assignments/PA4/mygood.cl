@@ -7,13 +7,16 @@
 --                 }};
 --  foo(): String {"test"};
 -- };
-class Foo {
- x:Int <- 3;
-}
-;
+-- class Foo {
+--  x:Int <- 3;
+-- };
 class Main {
- main(): Object {{5.copy(); "test".copy(); true.copy(); 
-                  "test".length(); } };
+ main(): Object {{
+     5.copy(); 
+     "test".copy(); 
+     true.copy(); 
+    "test".length(); 
+    } };
 };
 -- class C {
 -- 	a : Int;

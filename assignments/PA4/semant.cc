@@ -350,21 +350,25 @@ Symbol ClassTable::typecheck_dispatch(Expression expr) {
     Symbol name = e->get_name();  // name f
     Expressions actual = e->get_actual();
     Symbol T0 = typecheck_expr(e0);
+    if (semant_debug)  cout << "[INFO] e0 type: " << T0 << " -> ";
     if (T0 == SELF_TYPE)
         T0 = cls_env->get_name();
+    if (semant_debug)  cout << T0 << endl;
+
     MtdKeyType key = std::make_pair(T0, name);
+    Symbol T_search = T0;
     while(!method_env.count(key)) {
         if (semant_debug) 
-            cout <<  "[INFO] Method: " << name << " not found in class "
-                << T0 << ", searching parent..." << endl;
-        if (T0 == Object) {
+            cout <<  "[INFO] Method " << name << " not found in class "
+                << T_search << ", searching parent..." << endl;
+        if (T_search == Object) {
             semant_error();
             dump_fname_lineno(cerr, cls_env)
                 << "Dispatch to undefined method " << name << "." << endl;
             return Object;
         }
-        T0 = ig_nodes[T0]->get_parent();
-        key = std::make_pair(T0, name);
+        T_search = ig_nodes[T_search]->get_parent();
+        key = std::make_pair(T_search, name);
     }
     MtdValType signatures = *method_env[key];
     int num_formals_decl = *reinterpret_cast<int*>(signatures[NUM_FORMALS]);
@@ -386,7 +390,11 @@ Symbol ClassTable::typecheck_dispatch(Expression expr) {
         }
     }
     Symbol T_ret = signatures[actual->len()];
+    if (semant_debug) 
+        cout << "[INFO] Method " << name << " return type: " << T_ret << " -> ";
     T_ret = (T_ret == SELF_TYPE) ? T0 : T_ret;
+    if (semant_debug)
+        cout << T_ret << endl;
     expr->set_type(T_ret);
     return T_ret;
 }
@@ -399,6 +407,7 @@ Symbol ClassTable::typecheck_static_dispatch(Expression expr) {
     Symbol name = e->get_name();    // name f
     Expressions actual = e->get_actual();
     Symbol T0 = typecheck_expr(e0);
+    if (semant_debug)  cout << "[INFO] e0 type: " << T0 << endl;
     if (!conform(T0, T)) {
         semant_error();
         dump_fname_lineno(cerr, cls_env)
@@ -441,7 +450,11 @@ Symbol ClassTable::typecheck_static_dispatch(Expression expr) {
         }
     }
     Symbol T_ret = signatures[actual->len()+1];
+    if (semant_debug)
+        cout << "Method " << name << " return type: " << T_ret << " -> ";
     T_ret = (T_ret == SELF_TYPE) ? T0 : T_ret;
+    if (semant_debug)
+        cout << T_ret << endl;
     expr->set_type(T_ret);
     return T_ret;
 }
@@ -675,7 +688,6 @@ void ClassTable::typecheck_method(Feature feat) {
     MtdKeyType key = std::make_pair(cls_env->get_name(), feat->get_name());
     method_env[key] = new MtdValType();
     MtdValType signatures = *method_env[key];
-    // handle formals
     int num_formals = _add_formal_signatures(feat);
     // check method return type defined
     if (feat->get_type() == SELF_TYPE)
@@ -895,31 +907,12 @@ int ClassTable::_add_formal_ids(Feature feat) {
 void ClassTable::_decl_class(Class_ cls) {
     obj_env.enterscope();
     cls_env = cls;
-    // If is Object, search children directly
-    /* if (cls->get_name() == Object) { */
-    /*     for (IGnode_list *l = cls->get_children(); l != NULL; l = l->tl()) { */
-    /*         Class_ child = l->hd(); */
-    /*         _decl_class(child); */
-    /*     } */
-    /*     obj_env_cache[cls->get_name()] = obj_env;  // save current scope */
-    /*     obj_env.exitscope(); */
-    /*     return; */
-    /* } */
-
-    // If primitive class, skip
-    /* for (int i = 0; i != NUM_PRIMITIVES; ++i) { */
-    /*     if (cls->get_name() == prim_types[i]) { */
-    /*         obj_env.exitscope(); */
-    /*         return; */
-    /*     } */
-    /* } */
 
     // First add attr/methods
     if (semant_debug)  cout << "Declaring class: " << cls->get_name() << endl;
     Features features = cls->get_features();
     for (int i = features->first(); features->more(i); i = features->next(i)) {
         Feature f = features->nth(i);
-        Symbol name = f->get_name();
         if (f->is_method())
             typecheck_method(f);
         else
@@ -944,10 +937,9 @@ void ClassTable::_check_method_body(Class_ cls) {
     Features features = cls->get_features();
     for (int i = features->first(); features->more(i); i = features->next(i)) {
         Feature f = features->nth(i);
-        Symbol name = f->get_name();
         if (f->is_method()) {
             // handle expression body
-            if (semant_debug) cout << " Method: " << name << endl;
+            if (semant_debug) cout << " Method: " << f->get_name() << endl;
             obj_env.enterscope();
             obj_env.addid(self, new Symbol(SELF_TYPE));
             _add_formal_ids(f);

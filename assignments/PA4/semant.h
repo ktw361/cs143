@@ -23,23 +23,55 @@ typedef ClassTable *ClassTableP;
 
 class ClassTable {
 private:
+  static const int NUM_PRIMITIVES;
+  /* An arbitrary large number to store number of formals in MtdValType. */
+  static const int NUM_FORMALS; 
+
   int semant_errors;
   void install_basic_classes();
   ostream& error_stream;
   // TypeEnv
-  typedef SymbolTable<Symbol, Symbol> EnvType;
-  EnvType *obj_env;
-  EnvType *method_env;
+  typedef SymbolTable<Symbol, Symbol> ObjEnvType;  // Object env
+  typedef std::map<Symbol, ObjEnvType> ObjCacheType;
+  typedef std::pair<Symbol, Symbol> MtdKeyType;
+  /* MtdValType: (T1, T2, ..., TN, TN+1)
+   * MtdValType[NUM_FORMALS] = N            */
+  typedef std::map<int, Symbol>     MtdValType;
+  typedef std::map<MtdKeyType, MtdValType*> MtdEnvType; // Method env
+  ObjEnvType obj_env;
+  MtdEnvType method_env;
+  ObjCacheType obj_env_cache;
   Class_   cls_env;
 
   // Helper function
+  int _add_formal_signatures(Feature);
+  int _add_formal_ids(Feature);
   void _decl_class(Class_);
-  void _add_formals(Feature);
+  void _check_method_body(Class_);
   // Type cheker
   Symbol typecheck_expr(Expression);
-  Symbol typecheck_assign(Symbol, Expression);
+  Symbol typecheck_var(Expression);
+  Symbol typecheck_assign(Expression);
+  Symbol typecheck_bool(Expression);
+  Symbol typecheck_int(Expression);
+  Symbol typecheck_string(Expression);
+  Symbol typecheck_new(Expression);
+  Symbol typecheck_dispatch(Expression);
+  Symbol typecheck_static_dispatch(Expression);
+  Symbol typecheck_cond(Expression);
+  Symbol typecheck_block(Expression);
+  Symbol typecheck_let(Expression);
+  Symbol typecheck_case(Expression);
+  Symbol typecheck_loop(Expression);
+  Symbol typecheck_isvoid(Expression);
+  Symbol typecheck_neg(Expression);
+  Symbol typecheck_compare(Expression);
+  Symbol typecheck_comp(Expression);
+  Symbol typecheck_arith(Expression);
+  Symbol typecheck_equal(Expression);
 
-  Class_ Object_node;  // Root of inheritance tree
+  Class_ Object_node;                   // Root of inheritance tree
+  Symbol *prim_types;                   // Primitive types
   std::map<Symbol, Class_> ig_nodes;    // Inheritance Graph nodes
   bool check_inheritance_graph();
   bool conform(Symbol, Symbol);         // type conformance
@@ -52,6 +84,8 @@ public:
   ostream& semant_error(Class_ c);
   ostream& semant_error(Symbol filename, tree_node *t);
 };
+const int ClassTable::NUM_PRIMITIVES = 3;
+const int ClassTable::NUM_FORMALS    = 0x3f3f3f3f;
 
 
 #endif

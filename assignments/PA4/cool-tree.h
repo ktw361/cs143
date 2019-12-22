@@ -326,6 +326,9 @@ public:
    }
    Expression copy_Expression();
    void dump(ostream& stream, int n);
+   // Semant
+   Symbol get_name();
+   Expression get_expr();
 
 #ifdef Expression_SHARED_EXTRAS
    Expression_SHARED_EXTRAS
@@ -352,6 +355,11 @@ public:
    }
    Expression copy_Expression();
    void dump(ostream& stream, int n);
+   // Semant
+   Expression get_expr();
+   Symbol get_type();
+   Symbol get_name();
+   Expressions get_actual();
 
 #ifdef Expression_SHARED_EXTRAS
    Expression_SHARED_EXTRAS
@@ -376,6 +384,10 @@ public:
    }
    Expression copy_Expression();
    void dump(ostream& stream, int n);
+   // Semant
+   Expression get_expr();
+   Symbol get_name();
+   Expressions get_actual();
 
 #ifdef Expression_SHARED_EXTRAS
    Expression_SHARED_EXTRAS
@@ -775,6 +787,8 @@ public:
    }
    Expression copy_Expression();
    void dump(ostream& stream, int n);
+   // Semant
+   Symbol get_type();
 
 #ifdef Expression_SHARED_EXTRAS
    Expression_SHARED_EXTRAS
@@ -833,6 +847,8 @@ public:
    }
    Expression copy_Expression();
    void dump(ostream& stream, int n);
+   // Semant
+   Symbol get_name();
 
 #ifdef Expression_SHARED_EXTRAS
    Expression_SHARED_EXTRAS

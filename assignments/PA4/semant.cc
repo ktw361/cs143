@@ -120,6 +120,9 @@ Expression attr_class::get_expr() { return init; }
 Symbol formal_class::get_name() { return name; }
 Symbol formal_class::get_type() { return type_decl; }
 
+// The following functions are not virtual, 
+// and Base class Expression defines its own get_type();
+//
 /* let_class */
 Symbol let_class::get_iden() { return identifier; }
 Symbol let_class::get_type() { return type_decl; }
@@ -138,17 +141,345 @@ Expression branch_class::get_expr() { return expr; }
 /* block_class */
 Expressions block_class::get_body() { return body; }
 
+/* assign_class */
+Symbol assign_class::get_name() { return name; }
+Expression assign_class::get_expr() { return expr; }
+
+/* new__class */
+Symbol new__class::get_type() { return type_name; }
+
+/* dispatch_class */
+Expression dispatch_class::get_expr() { return expr; }
+Symbol dispatch_class::get_name() { return name; }
+Expressions dispatch_class::get_actual() { return actual; }
+
+/* static_dispatch_class */
+Expression static_dispatch_class::get_expr() { return expr; }
+Symbol static_dispatch_class::get_type() { return type_name; }
+Symbol static_dispatch_class::get_name() { return name; }
+Expressions static_dispatch_class::get_actual() { return actual; }
+
+/* object_class */
+Symbol object_class::get_name() { return name; }
+
+
 /**** end of implementation in cool-tree.h ****/
 
-typedef SymbolTable<Symbol, Symbol> EnvType;
 // Can't use plain function, as tree_node doesn't have get_name()
 #define dump_fname_lineno(s, n)             \
 (s) << (n)->get_filename() << ":" <<  (n)->get_line_number() << ": "
 
+/*** Type checker ***/
+Symbol ClassTable::typecheck_expr(Expression expr) {
+    Symbol ret = Object;
+    if (dynamic_cast<object_class*>(expr)) {
+        ret = typecheck_var(expr);
+    } else if (dynamic_cast<assign_class*>(expr)) {
+		ret = typecheck_assign(expr);
+	} else if (dynamic_cast<bool_const_class*>(expr)) {
+		ret = typecheck_bool(expr);
+	} else if (dynamic_cast<int_const_class*>(expr)) {
+		ret = typecheck_int(expr);
+	} else if (dynamic_cast<string_const_class*>(expr)) {
+		ret = typecheck_string(expr);
+	} else if (dynamic_cast<new__class*>(expr)) {
+		ret = typecheck_new(expr);
+	} else if (dynamic_cast<dispatch_class*>(expr)) {
+		ret = typecheck_dispatch(expr);
+	} else if (dynamic_cast<static_dispatch_class*>(expr)) {
+		ret = typecheck_static_dispatch(expr);
+	} else if (dynamic_cast<cond_class*>(expr)) {
+		ret = typecheck_cond(expr);
+	} else if (dynamic_cast<block_class*>(expr)) {
+		ret = typecheck_block(expr);
+	} else if (dynamic_cast<let_class*>(expr)) {
+		ret = typecheck_let(expr);
+	} else if (dynamic_cast<Case_class*>(expr)) {
+		ret = typecheck_case(expr);
+	} else if (dynamic_cast<loop_class*>(expr)) {
+		ret = typecheck_loop(expr);
+	} else if (dynamic_cast<isvoid_class*>(expr)) {
+		ret = typecheck_isvoid(expr);
+	} else if (dynamic_cast<neg_class*>(expr)) {
+		ret = typecheck_neg(expr);
+	} else if (dynamic_cast<lt_class*>(expr)) {
+		ret = typecheck_compare(expr);
+	} else if (dynamic_cast<eq_class*>(expr)) {
+		ret = typecheck_compare(expr);
+	} else if (dynamic_cast<leq_class*>(expr)) {
+		ret = typecheck_compare(expr);
+	} else if (dynamic_cast<comp_class*>(expr)) {
+		ret = typecheck_comp(expr);
+	} else if (dynamic_cast<plus_class*>(expr)) {
+		ret = typecheck_arith(expr);
+	} else if (dynamic_cast<sub_class*>(expr)) {
+		ret = typecheck_arith(expr);
+	} else if (dynamic_cast<mul_class*>(expr)) {
+		ret = typecheck_arith(expr);
+	} else if (dynamic_cast<divide_class*>(expr)) {
+		ret = typecheck_arith(expr);
+	} else if (dynamic_cast<eq_class*>(expr)) {
+		ret = typecheck_equal(expr);
+	} else {
+        ;
+    }
+    // TODO delete this
+    /* semant_error(); */
+    /* dump_fname_lineno(cerr, cls_env) */ 
+    /*     << "Expression not found, Fall through"; */
+    return ret; // TODO delete?
+}
+
+Symbol ClassTable::typecheck_var(Expression expr) {
+    object_class *e = dynamic_cast<object_class*>(expr);
+    Symbol s = e->get_name();
+    Symbol *pT = obj_env.lookup(s);
+    if (pT == NULL) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Undeclared identifier " << s << "." << endl;
+        return Object;
+    }
+    return *pT;
+}
+
+Symbol ClassTable::typecheck_assign(Expression expr) {
+    assign_class *e = dynamic_cast<assign_class*>(expr);
+    Symbol id = e->get_name();
+    Symbol T, *pT = obj_env.lookup(id);
+    if (pT == NULL) {
+        // TODO
+        dump_fname_lineno(cerr, cls_env)
+            << "Assignment to undeclared variable "
+            << T << "." << endl;
+        return Object;
+    }
+    T = *pT;
+
+    Expression e1 = e->get_expr();
+    Symbol T1 = typecheck_expr(e1);
+    if (!conform(T, T1)) {
+        semant_error();
+        // TODO
+        dump_fname_lineno(cerr, cls_env)
+            << "Type " << T1 << " of assigned expression does not"
+            << " conform to declared type " << T 
+            << " of identifier " << id << "." << endl;
+        return Object;
+    }
+    return T1;
+}
+
+Symbol ClassTable::typecheck_bool(Expression expr) {
+    return Bool;
+}
+
+Symbol ClassTable::typecheck_int(Expression expr) {
+    return Int;
+}
+
+Symbol ClassTable::typecheck_string(Expression expr) {
+    return Str;
+}
+
+Symbol ClassTable::typecheck_new(Expression expr) {
+    new__class *e = dynamic_cast<new__class*>(expr);
+    Symbol T = e->get_type();
+    if (T == SELF_TYPE)
+        return SELF_TYPE;
+    else
+        return T;
+}
+
+Symbol ClassTable::typecheck_dispatch(Expression expr) {
+    dispatch_class *e = dynamic_cast<dispatch_class*>(expr); 
+    Expression e0 = e->get_expr();
+    Symbol name = e->get_name();  // name f
+    Expressions actual = e->get_actual();
+    Symbol T0 = typecheck_expr(e0);
+    if (T0 == SELF_TYPE)
+        T0 = cls_env->get_name();
+    MtdKeyType key = std::make_pair(T0, name);
+    while(!method_env.count(key)) {
+        if (semant_debug) 
+            cout <<  "[INFO] Method: " << name << " not found in class "
+                << T0 << ", searching parent..." << endl;
+        T0 = ig_nodes[T0]->get_parent();
+        key = std::make_pair(T0, name);
+        if (T0 == Object) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "Dispatch to undefined method " << name << "." << endl;
+            return Object;
+        }
+    }
+    MtdValType signatures = *method_env[key];
+    int num_formals_decl = *reinterpret_cast<int*>(signatures[NUM_FORMALS]);
+    if (num_formals_decl != actual->len()) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Method " << name << " called with wrong number of arguments.\n";
+        return Object;
+    }
+    for (int i = actual->first(); actual->more(i); i = actual->next(i)) {
+        Symbol Ti = typecheck_expr(actual->nth(i));
+        Symbol Ti_decl = signatures[i];
+        if (!conform(Ti, Ti_decl)) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "In call of method " << name << ", type " << Ti
+                << " does not conform to declared type " << Ti_decl << ".\n";
+            return Object;
+        }
+    }
+    Symbol T_ret = signatures[actual->len()+1];
+    T_ret = (T_ret == SELF_TYPE) ? T0 : T_ret;
+    return T_ret;
+}
+
+Symbol ClassTable::typecheck_static_dispatch(Expression expr) {
+    // e0@T.name(e1, e2, ..., en)
+    static_dispatch_class *e = dynamic_cast<static_dispatch_class*>(expr);
+    Expression e0 = e->get_expr();
+    Symbol T = e->get_type();       // target typename
+    Symbol name = e->get_name();    // name f
+    Expressions actual = e->get_actual();
+    Symbol T0 = typecheck_expr(e0);
+    if (!conform(T0, T)) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Expression type " << T0 
+            << " does not conform to declared static dispatch type "
+            << T << "." << endl;
+        return Object;
+    }
+    MtdKeyType key = std::make_pair(T, name);
+    while(!method_env.count(key)) {
+        if (semant_debug) 
+            cout <<  "[INFO] Method: " << name << " not found in class "
+                << T0 << ", searching parent..." << endl;
+        T0 = ig_nodes[T0]->get_parent();
+        key = std::make_pair(T0, name);
+        if (T0 == Object) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "Static dispatch to undefined method " << name << "." << endl;
+            return Object;
+        }
+    }
+    MtdValType signatures = *method_env[key];
+    int num_formals_decl = *reinterpret_cast<int*>(signatures[NUM_FORMALS]);
+    if (num_formals_decl != actual->len()) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Method " << name << " called with wrong number of arguments.\n";
+        return Object;
+    }
+    for (int i = actual->first(); actual->more(i); i = actual->next(i)) {
+        Symbol Ti = typecheck_expr(actual->nth(i));
+        Symbol Ti_decl = signatures[i];
+        if (!conform(Ti, Ti_decl)) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "In call of method " << name << ", type " << Ti
+                << " does not conform to declared type " << Ti_decl << ".\n";
+            return Object;
+        }
+    }
+    Symbol T_ret = signatures[actual->len()+1];
+    T_ret = (T_ret == SELF_TYPE) ? T0 : T_ret;
+    return T_ret;
+}
+
+Symbol ClassTable::typecheck_cond(Expression expr) {
+}
+
+Symbol ClassTable::typecheck_block(Expression expr) {
+    block_class *e = dynamic_cast<block_class*>(expr);
+    obj_env.enterscope();
+    Expressions exprs = e->get_body();
+    Symbol T_tmp = Object;
+    for (int i = exprs->first(); exprs->more(i); i = exprs->next(i)) {
+        T_tmp = typecheck_expr(exprs->nth(i));
+    }
+    obj_env.exitscope();
+    return T_tmp;
+}
+
+Symbol ClassTable::typecheck_let(Expression expr) {
+    let_class *e = dynamic_cast<let_class*>(expr);
+    obj_env.enterscope();
+    // First check init expr without definition of new identifier
+    Symbol init_type = typecheck_expr(e->get_init());
+
+    // Then add new identifier and check body
+    obj_env.enterscope();
+    if (!ig_nodes.count(e->get_type())) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Class " << e->get_type()
+            << " of let-bound identifier " << e->get_iden()
+            << " is undefined." << endl;
+    } else 
+        obj_env.addid(e->get_iden(), new Symbol(e->get_type()));
+    Symbol body_type = typecheck_expr(e->get_body());
+    obj_env.exitscope();
+
+    obj_env.exitscope();
+}
+
+Symbol ClassTable::typecheck_case(Expression expr) {
+    typcase_class *e = dynamic_cast<typcase_class*>(expr);
+    typecheck_expr(e->get_expr());
+    Cases cases = e->get_cases();
+    for (int i = cases->first(); cases->more(i); i = cases->next(i)) {
+        Case c = cases->nth(i);
+        obj_env.enterscope();
+        if (!ig_nodes.count(c->get_type())) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "Class " << c->get_type()
+                << " of case branch is undefined." << endl;
+        } else 
+            obj_env.addid(c->get_name(), new Symbol(c->get_type()));
+        typecheck_expr(c->get_expr());
+        obj_env.exitscope();
+    }
+}
+
+Symbol ClassTable::typecheck_loop(Expression expr) {
+
+}
+
+Symbol ClassTable::typecheck_isvoid(Expression expr) {
+
+}
+
+Symbol ClassTable::typecheck_neg(Expression expr) {
+
+}
+
+Symbol ClassTable::typecheck_compare(Expression expr) {
+
+}
+
+Symbol ClassTable::typecheck_comp(Expression expr) {
+
+}
+
+Symbol ClassTable::typecheck_arith(Expression expr) {
+
+}
+
+Symbol ClassTable::typecheck_equal(Expression expr) {
+
+}
+
+/*** end of type checker ***/
+
 bool ClassTable::check_inheritance_graph() {
     // Connect every IGnode(Class_) to its children
     typedef std::map<Symbol, Class_>::iterator _Iter;
-    Symbol prim_types[] = {Int, Bool, Str};
     for (_Iter iter = ig_nodes.begin(); iter != ig_nodes.end(); ++iter) {
         Class_ node = iter->second;
         // Skip Object
@@ -156,7 +487,7 @@ bool ClassTable::check_inheritance_graph() {
 
         Symbol parent = node->get_parent();
         // Make sure it does not inherit from primitive types
-        for (int i = 0; i != sizeof(prim_types)/sizeof(Symbol); ++i) {
+        for (int i = 0; i != NUM_PRIMITIVES; ++i) {
             if (parent == prim_types[i]) {
                 semant_error();
                 dump_fname_lineno(cerr, node)
@@ -197,19 +528,6 @@ bool ClassTable::check_inheritance_graph() {
         for (IGnode_list *l = node->get_children(); l != NULL; l = l->tl()) {
             Class_ child = l->hd();
             // No need to check multiple inheritance, its done by Grammar/parser
-            if (visited.count(child)) {
-                // inheritance cycle
-                Symbol cmp = child->get_name();
-                while(child->get_parent() != cmp) {
-                    semant_error();
-                    dump_fname_lineno(cerr, child)
-                        << "Class " << child->get_name() 
-                        << ", or an ancestor of " << child->get_name()
-                        << ", is involved in an inheritance cycle." << endl;
-                    child = ig_nodes[child->get_name()];
-                }
-                return false;
-            }
             que.push_back(child);
         }
     }
@@ -273,12 +591,15 @@ Symbol ClassTable::lub(Symbol a, Symbol b) {
     return ret;
 }
 
-void ClassTable::_add_formals(Feature feat) {
+int ClassTable::_add_formal_signatures(Feature feat) {
     Formals formals = feat->get_formals();
+    MtdKeyType key = std::make_pair(cls_env->get_name(), feat->get_name());
+    method_env[key] = new MtdValType();
+    MtdValType &signatures = *method_env[key];
     for (int i = formals->first(); formals->more(i); i = formals->next(i)) {
         Formal form = formals->nth(i);
         if (semant_debug)
-            cout << " Formal: " << form->get_name() << ", type: "
+            cout << " Check Formal signature: " << form->get_name() << ", type: "
                 << form->get_type() << endl;
         if (!ig_nodes.count(form->get_type())) {
             semant_error();
@@ -286,88 +607,50 @@ void ClassTable::_add_formals(Feature feat) {
                 << "Class " << form->get_type()
                 << " of formal paramer " << form->get_name()
                 << " is undefined." << endl;
+            signatures[i] = Object;
         } else 
-            obj_env->addid(form->get_name(), new Symbol(form->get_type()));
+            signatures[i] = form->get_type();
     }
+    signatures[NUM_FORMALS] = reinterpret_cast<Symbol>(new int(formals->len()));  
+    return formals->len();
 }
 
-Symbol ClassTable::typecheck_assign(Symbol id, Expression e) {
-    Symbol e_type = typecheck_expr(e);
-    // Note the verification of id's type is done by caller.
-    Symbol T;
-    if ((T = *obj_env->lookup(id)) == NULL) {
-        dump_fname_lineno(cerr, cls_env)
-            << "Assignment to undeclared variable "
-            << id << "." << endl;
-        return Object;
-    } 
-    // TODO
-    if (!(e_type <= T)) {
-        dump_fname_lineno(cerr, cls_env)
-            << "Type " << e_type << " of assigned expression does not"
-            << " conform to declared type " << T 
-            << " of identifier " << id << "." << endl;
-        return Object;
+int ClassTable::_add_formal_ids(Feature feat) {
+    Formals formals = feat->get_formals();
+    int i = 0;
+    for (i = formals->first(); formals->more(i); i = formals->next(i)) {
+        Formal form = formals->nth(i);
+        if (semant_debug)
+            cout << " Add Formal id: " << form->get_name() << ", type: "
+                << form->get_type() << endl;
+        obj_env.addid(form->get_name(), new Symbol(form->get_type()));
     }
-    return e_type;
-}
-
-Symbol ClassTable::typecheck_expr(Expression expr) {
-    if (dynamic_cast<let_class*>(expr)) {
-        let_class *e = dynamic_cast<let_class*>(expr);
-        obj_env->enterscope();
-        // First check init expr without definition of new identifier
-        Symbol init_type = typecheck_expr(e->get_init());
-
-        // Then add new identifier and check body
-        obj_env->enterscope();
-        if (!ig_nodes.count(e->get_type())) {
-            semant_error();
-            dump_fname_lineno(cerr, cls_env)
-                << "Class " << e->get_type()
-                << " of let-bound identifier " << e->get_iden()
-                << " is undefined." << endl;
-        } else 
-            obj_env->addid(e->get_iden(), new Symbol(e->get_type()));
-        Symbol body_type = typecheck_expr(e->get_body());
-        obj_env->exitscope();
-
-        obj_env->exitscope();
-    } else if (dynamic_cast<typcase_class*>(expr)) {
-        typcase_class *e = dynamic_cast<typcase_class*>(expr);
-        typecheck_expr(e->get_expr());
-        Cases cases = e->get_cases();
-        for (int i = cases->first(); cases->more(i); i = cases->next(i)) {
-            Case c = cases->nth(i);
-            obj_env->enterscope();
-            if (!ig_nodes.count(c->get_type())) {
-                semant_error();
-                dump_fname_lineno(cerr, cls_env)
-                    << "Class " << c->get_type()
-                    << " of case branch is undefined." << endl;
-            } else 
-                obj_env->addid(c->get_name(), new Symbol(c->get_type()));
-            typecheck_expr(c->get_expr());
-            obj_env->exitscope();
-        }
-    } else if (dynamic_cast<block_class*>(expr)) {
-        block_class *e = dynamic_cast<block_class*>(expr);
-        obj_env->enterscope();
-        Expressions exprs = e->get_body();
-        for (int i = exprs->first(); exprs->more(i); i = exprs->next(i)) {
-            typecheck_expr(exprs->nth(i));
-        }
-        obj_env->exitscope();
-    } else {
-        ;
-    }
+    return i;
 }
 
 void ClassTable::_decl_class(Class_ cls) {
-    obj_env->enterscope();
-    method_env->enterscope();
+    obj_env.enterscope();
     cls_env = cls;
+    // If is Object, search children directly
+    if (cls->get_name() == Object) {
+        for (IGnode_list *l = cls->get_children(); l != NULL; l = l->tl()) {
+            Class_ child = l->hd();
+            _decl_class(child);
+        }
+        obj_env_cache[cls->get_name()] = obj_env;  // save current scope
+        obj_env.exitscope();
+        return;
+    }
 
+    // If primitive class, skip
+    for (int i = 0; i != NUM_PRIMITIVES; ++i) {
+        if (cls->get_name() == prim_types[i]) {
+            obj_env.exitscope();
+            return;
+        }
+    }
+
+    // First add attr/methods
     if (semant_debug)  cout << "Declaring class: " << cls->get_name() << endl;
     Features features = cls->get_features();
     for (int i = features->first(); features->more(i); i = features->next(i)) {
@@ -375,53 +658,105 @@ void ClassTable::_decl_class(Class_ cls) {
         Symbol name = f->get_name();
         if (f->is_method()) {
             if (semant_debug) cout << "Method: " << name << endl;
+            MtdKeyType key = std::make_pair(cls_env->get_name(), f->get_name());
+            method_env[key] = new MtdValType();
+            MtdValType signatures = *method_env[key];
             // handle formals
-            _add_formals(f);
-            // check return type defined
-            bool defined = ig_nodes.count(f->get_type());
-            if (!defined) {
+            int num_formals = _add_formal_signatures(f);
+            // check method return type defined
+            if (f->get_type() == SELF_TYPE)
+                signatures[num_formals] = SELF_TYPE;
+            else if (!ig_nodes.count(f->get_type())) {
                 semant_error();
                 dump_fname_lineno(cerr, cls)
-                    << "Undefined return type " << f->get_type()
+                    << "Undefined return type " << f->get_type()   
                     << " in method " << name << "." << endl;
-            } 
-            // handle expressions
-            obj_env->enterscope();
-            typecheck_expr(f->get_expr());
-            obj_env->exitscope();
-            if (defined)
-                method_env->addid(name, new Symbol(f->get_type()));
+                signatures[num_formals] = Object;
+            } else 
+                signatures[num_formals] = f->get_type();
         } else {
             if (semant_debug) cout << "Attr: " << name << endl;
             // check attr type defined
-            bool defined = ig_nodes.count(f->get_type());
-            if (!defined) {
+            if (!ig_nodes.count(f->get_type())) {
                 semant_error();
                 dump_fname_lineno(cerr, cls)
                     << "Class " << f->get_type()
                     << " of attribute " << name
                     << " is undefined." << endl;
-                obj_env->addid(name, new Symbol(Object));
-            } else
-                obj_env->addid(name, new Symbol(f->get_type()));
-            // handle init expressions
-            obj_env->enterscope();
-            typecheck_assign(f->get_name(), f->get_expr());
-            obj_env->exitscope();
+                obj_env.addid(name, new Symbol(Object));
+            } else {
+                obj_env.addid(name, new Symbol(f->get_type()));
+                // type check attr
+                if (dynamic_cast<no_expr_class*>(f->get_expr())) {
+                    ;
+                } else {
+                    // handle attr init expressions
+                    obj_env.enterscope();
+                    Symbol T0 = f->get_type();
+                    obj_env.addid(self, new Symbol(SELF_TYPE));
+                    Symbol T1 = typecheck_expr(f->get_expr());
+                    if (!conform(T1, T0)) {
+                        semant_error();
+                        dump_fname_lineno(cerr, cls)
+                            << "Inferred type " << T1
+                            << " of initialization of attribute " << f->get_name()
+                            << " does not conform to declared type " 
+                            << T0 << "." << endl;
+                    }
+                    obj_env.exitscope();
+                }
+            }
         }
     }
-    obj_env->exitscope();
-    method_env->exitscope();
+
+    // Then, dfs step, add sub class method signature / attrs / attr-expr
+    for (IGnode_list *l = cls->get_children(); l != NULL; l = l->tl()) {
+        Class_ child = l->hd();
+        _decl_class(child);
+    }
+    obj_env_cache[cls->get_name()] = obj_env;  // save current scope
+    obj_env.exitscope();
+}
+
+void ClassTable::_check_method_body(Class_ cls) {
+    obj_env = obj_env_cache[cls->get_name()];
+    cls_env = cls;
+
+    if (semant_debug)  cout << "Method checking: " << cls->get_name() << endl;
+    Features features = cls->get_features();
+    for (int i = features->first(); features->more(i); i = features->next(i)) {
+        Feature f = features->nth(i);
+        Symbol name = f->get_name();
+        if (f->is_method()) {
+            // handle expression body
+            if (semant_debug) cout << " Method: " << name << endl;
+            obj_env.enterscope();
+            obj_env.addid(self, new Symbol(SELF_TYPE));
+            _add_formal_ids(f);
+            Symbol T0 = f->get_type();
+            Symbol T0_infer = typecheck_expr(f->get_expr()); // return type, T0'
+            if (!conform(T0_infer, T0)) {
+                semant_error();
+                dump_fname_lineno(cerr, cls)
+                    << "Inferred return type " << T0_infer
+                    << " of method " << f->get_name() 
+                    << " does not conform to declared return type "
+                    << T0 << "." << endl;
+            }
+            obj_env.exitscope();
+        }
+    }
 }
 
 ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) {
 
     /* Fill this in */
-    obj_env = new SymbolTable<Symbol, Symbol>();
-    method_env = new SymbolTable<Symbol, Symbol>();
+    obj_env = ObjEnvType();
+    method_env = MtdEnvType();
+    obj_env_cache = ObjCacheType();
     cls_env = NULL;
 
-    // Part I: Check inheritance graph()
+    // Pass I: Check inheritance graph()
     install_basic_classes();
     if (semant_debug)
         cout <<  "Num classes: " << classes->len() << endl;
@@ -432,38 +767,40 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) 
             cout << "Gathering: " << cur->get_name() << endl;
         }
         if (ig_nodes.count(cur->get_name())) {
+            // check conflict with prim types
+            bool redefine_prim = false;
+            for (int j = 0; j != NUM_PRIMITIVES; ++j) {
+                if (cur->get_name() == prim_types[j]) {
+                    redefine_prim = true;
+                    semant_error();
+                    dump_fname_lineno(cerr, cur)
+                        << "Redefinition of basic class " 
+                        << cur->get_name() << endl;
+                    break;
+                }
+            }
             // multiple definition
-            semant_error();
-            cerr << cur->get_filename() << ":";
-            cerr << cur->get_line_number() << ": ";
-            cerr << "Class " << cur->get_name();
-            cerr << " was previously defined." << endl;
+            if (!redefine_prim) {
+                semant_error();
+                dump_fname_lineno(cerr, cur)
+                    << "Class " << cur->get_name()
+                    << " was previously defined." << endl;
+            }
         } else 
             ig_nodes[cur->get_name()] = cur;
     }
     if (!check_inheritance_graph()) return;  // second pass
-
-    Symbol F2 = idtable.add_string("F2");
-    Symbol FF = idtable.add_string("FF");
-    Symbol C = idtable.add_string("C");
-    Symbol A = idtable.add_string("A");
-    Symbol F1 = idtable.add_string("F1");
-    cout << conform(Int, Object) 
-        << conform(Object, Object) 
-        << conform(F2, Object) 
-        << conform(F2, F1)
-        << conform(F1, F2)
-        << conform(F1, C)
-        << conform(F2, C) << endl;
-    cout << lub(Object, Object) << endl
-        << lub(Int, Bool) << endl
-        << lub(F1, F2) << endl
-        << lub(FF, A) << endl;
         
-    // Part II: add declaration to symbol table; check expression correctness.
-    /* for (int i = classes->first(); classes->more(i); i = classes->next(i)) { */
-    /*     _decl_class(classes->nth(i)); */
-    /* } */
+    // Pass II: DFS inheritance graph from root to get correct scoping.
+    if (semant_debug) cout << endl << "Second pass: _decl_class()" << endl;
+    _decl_class(Object_node);
+    if (this->errors()) return;
+    
+    // Pass III, check method expr
+    if (semant_debug) cout << endl << "Third pass: _check_method_body()" << endl;
+    for (int i = classes->first(); classes->more(i); i = classes->next(i)) {
+        _check_method_body(classes->nth(i));
+    }
 }
 
 void ClassTable::install_basic_classes() {
@@ -573,6 +910,8 @@ void ClassTable::install_basic_classes() {
     ig_nodes[Int] = Int_class;
     ig_nodes[Str] = Str_class;
     ig_nodes[Bool] = Bool_class;
+    prim_types = new Symbol[NUM_PRIMITIVES];
+    prim_types[0] = Int, prim_types[1] = Str, prim_types[2] = Bool;
 }
 
 ////////////////////////////////////////////////////////////////////

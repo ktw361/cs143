@@ -417,13 +417,14 @@ Symbol ClassTable::typecheck_static_dispatch(Expression expr) {
         return Object;
     }
     MtdKeyType key = std::make_pair(T, name);
+    Symbol T_search = T0;
     while(!method_env.count(key)) {
         if (semant_debug) 
             cout <<  "[INFO] Method: " << name << " not found in class "
-                << T0 << ", searching parent..." << endl;
-        T0 = ig_nodes[T0]->get_parent();
-        key = std::make_pair(T0, name);
-        if (T0 == Object) {
+                << T_search << ", searching parent..." << endl;
+        T_search = ig_nodes[T_search]->get_parent();
+        key = std::make_pair(T_search, name);
+        if (T_search == Object) {
             semant_error();
             dump_fname_lineno(cerr, cls_env)
                 << "Static dispatch to undefined method " << name << "." << endl;

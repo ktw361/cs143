@@ -162,6 +162,52 @@ Expressions static_dispatch_class::get_actual() { return actual; }
 /* object_class */
 Symbol object_class::get_name() { return name; }
 
+/* cond_class */
+Expression cond_class::get_pred() { return pred; }
+Expression cond_class::get_then() { return then_exp; }
+Expression cond_class::get_else() { return else_exp; }
+
+/* loop_class */
+Expression loop_class::get_pred() { return pred; }
+Expression loop_class::get_body() { return body; }
+
+/* isvoid_class */
+Expression isvoid_class::get_expr() { return e1; }
+
+/* comp_class */
+Expression comp_class::get_expr() { return e1; }
+
+/* lt_class */
+Expression lt_class::get_lhs() { return e1; }
+Expression lt_class::get_rhs() { return e2; }
+
+/* leq_class */
+Expression leq_class::get_lhs() { return e1; }
+Expression leq_class::get_rhs() { return e2; }
+
+/* eq_class */
+Expression eq_class::get_lhs() { return e1; }
+Expression eq_class::get_rhs() { return e2; }
+
+/* neg_class */
+Expression neg_class::get_expr() { return e1; }
+
+/* plus_class */
+Expression plus_class::get_e1() { return e1; }
+Expression plus_class::get_e2() { return e2; }
+
+/* sub_class */
+Expression sub_class::get_e1() { return e1; }
+Expression sub_class::get_e2() { return e2; }
+
+/* divide_class */
+Expression divide_class::get_e1() { return e1; }
+Expression divide_class::get_e2() { return e2; }
+
+/* mul_class */
+Expression mul_class::get_e1() { return e1; }
+Expression mul_class::get_e2() { return e2; }
+
 
 /**** end of implementation in cool-tree.h ****/
 
@@ -203,8 +249,6 @@ Symbol ClassTable::typecheck_expr(Expression expr) {
 	} else if (dynamic_cast<neg_class*>(expr)) {
 		ret = typecheck_neg(expr);
 	} else if (dynamic_cast<lt_class*>(expr)) {
-		ret = typecheck_compare(expr);
-	} else if (dynamic_cast<eq_class*>(expr)) {
 		ret = typecheck_compare(expr);
 	} else if (dynamic_cast<leq_class*>(expr)) {
 		ret = typecheck_compare(expr);
@@ -251,7 +295,7 @@ Symbol ClassTable::typecheck_assign(Expression expr) {
         // TODO
         dump_fname_lineno(cerr, cls_env)
             << "Assignment to undeclared variable "
-            << T << "." << endl;
+            << id << "." << endl;
         return Object;
     }
     T = *pT;
@@ -392,6 +436,18 @@ Symbol ClassTable::typecheck_static_dispatch(Expression expr) {
 }
 
 Symbol ClassTable::typecheck_cond(Expression expr) {
+    cond_class *e = dynamic_cast<cond_class*>(expr);
+    Symbol T1 = typecheck_expr(e->get_pred());
+    Symbol T2 = typecheck_expr(e->get_then());
+    Symbol T3 = typecheck_expr(e->get_else());
+    if (T1 != Bool) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Predicate of 'if' does not have type Bool (Got: "
+            << T1 << ")." << endl;
+        return Object;
+    }
+    return lub(T2, T3);
 }
 
 Symbol ClassTable::typecheck_block(Expression expr) {
@@ -408,30 +464,46 @@ Symbol ClassTable::typecheck_block(Expression expr) {
 
 Symbol ClassTable::typecheck_let(Expression expr) {
     let_class *e = dynamic_cast<let_class*>(expr);
-    obj_env.enterscope();
-    // First check init expr without definition of new identifier
-    Symbol init_type = typecheck_expr(e->get_init());
-
-    // Then add new identifier and check body
-    obj_env.enterscope();
-    if (!ig_nodes.count(e->get_type())) {
+    Symbol T0 = e->get_type();
+    T0 = (T0 == SELF_TYPE) ? SELF_TYPE : T0;
+    if (!ig_nodes.count(T0)) {
         semant_error();
         dump_fname_lineno(cerr, cls_env)
             << "Class " << e->get_type()
             << " of let-bound identifier " << e->get_iden()
             << " is undefined." << endl;
-    } else 
-        obj_env.addid(e->get_iden(), new Symbol(e->get_type()));
+        return Object;
+    } 
+    Expression init_expr = e->get_init();
+
+    // Let-No-Init
+    if (dynamic_cast<no_expr_class*>(init_expr)) {
+        obj_env.enterscope();
+        obj_env.addid(e->get_iden(), new Symbol(T0));
+        Symbol body_type = typecheck_expr(e->get_body());
+        obj_env.exitscope();
+        return body_type;
+    }
+
+    // Let-Init
+    //
+    // First check init expr without definition of new identifier
+    Symbol init_type = typecheck_expr(e->get_init());
+
+    // Then add new identifier and check body
+    obj_env.enterscope();
+    obj_env.addid(e->get_iden(), new Symbol(T0));
     Symbol body_type = typecheck_expr(e->get_body());
     obj_env.exitscope();
-
-    obj_env.exitscope();
+    return body_type;
 }
 
 Symbol ClassTable::typecheck_case(Expression expr) {
     typcase_class *e = dynamic_cast<typcase_class*>(expr);
-    typecheck_expr(e->get_expr());
+    Symbol T0 = typecheck_expr(e->get_expr());
     Cases cases = e->get_cases();
+    Symbol T_ret;
+    std::map<Symbol, bool> case_cache;
     for (int i = cases->first(); cases->more(i); i = cases->next(i)) {
         Case c = cases->nth(i);
         obj_env.enterscope();
@@ -440,39 +512,149 @@ Symbol ClassTable::typecheck_case(Expression expr) {
             dump_fname_lineno(cerr, cls_env)
                 << "Class " << c->get_type()
                 << " of case branch is undefined." << endl;
-        } else 
+            return Object;
+        } else if (case_cache.count(c->get_type())) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "Duplicate branch " << c->get_type()
+                << " in case statement." << endl;
+            return Object;
+        } else {
+            case_cache[c->get_type()] = true;
             obj_env.addid(c->get_name(), new Symbol(c->get_type()));
-        typecheck_expr(c->get_expr());
+        }
+        Symbol Ti = typecheck_expr(c->get_expr());
+        T_ret = (i == cases->first()) ? Ti : lub(Ti, T_ret);
         obj_env.exitscope();
     }
+    return T_ret;
 }
 
 Symbol ClassTable::typecheck_loop(Expression expr) {
-
+    loop_class *e = dynamic_cast<loop_class*>(expr);
+    if (typecheck_expr(e->get_pred()) != Bool) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Loop condition does not have type Bool." << endl;
+        return Object;
+    }
+    typecheck_expr(e->get_body());
+    return Object;
 }
 
 Symbol ClassTable::typecheck_isvoid(Expression expr) {
-
-}
-
-Symbol ClassTable::typecheck_neg(Expression expr) {
-
-}
-
-Symbol ClassTable::typecheck_compare(Expression expr) {
-
+    isvoid_class *e = dynamic_cast<isvoid_class*>(expr);
+    typecheck_expr(e->get_expr());
+    return Bool;
 }
 
 Symbol ClassTable::typecheck_comp(Expression expr) {
+    comp_class *e = dynamic_cast<comp_class*>(expr);
+    Symbol T0 = typecheck_expr(e->get_expr());
+    if (T0 != Bool) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Argument of 'not' has type " << T0
+            << " instead of Bool." << endl;
+        return Object;
+    }
+    return Bool;
+}
 
+Symbol ClassTable::typecheck_compare(Expression expr) {
+    Symbol T_lhs, T_rhs;
+    bool is_lt = false;
+    if (dynamic_cast<lt_class*>(expr)) {
+        lt_class *e = dynamic_cast<lt_class*>(expr);
+        T_lhs = typecheck_expr(e->get_lhs());
+        T_rhs = typecheck_expr(e->get_rhs());
+        is_lt = true;
+    } else {
+        leq_class *e = dynamic_cast<leq_class*>(expr);
+        T_lhs = typecheck_expr(e->get_lhs());
+        T_rhs = typecheck_expr(e->get_rhs());
+    }
+    if (T_lhs != Int || T_rhs != Int) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "non-Int arguments: " << T_lhs
+            << (is_lt ? " < " : " <= ") << T_rhs << endl;
+        return Object;
+    }
+    return Bool;
+}
+
+Symbol ClassTable::typecheck_neg(Expression expr) {
+    neg_class *e = dynamic_cast<neg_class*>(expr);
+    Symbol T0 = typecheck_expr(e->get_expr());
+    if (T0 != Bool) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Argument of '~' has type " << T0
+            << " instead of Int." << endl;
+        return Object;
+    }
+    return Bool;
 }
 
 Symbol ClassTable::typecheck_arith(Expression expr) {
-
+    Symbol T1, T2;
+    char *display;
+    if (dynamic_cast<plus_class*>(expr)) {
+        plus_class *e = dynamic_cast<plus_class*>(expr);
+        T1 = typecheck_expr(e->get_e1());
+        T2 = typecheck_expr(e->get_e2());
+        display = " + ";
+    } else if (dynamic_cast<sub_class*>(expr)) {
+        sub_class *e = dynamic_cast<sub_class*>(expr);
+        T1 = typecheck_expr(e->get_e1());
+        T2 = typecheck_expr(e->get_e2());
+        display = " - ";
+    } else if (dynamic_cast<mul_class*>(expr)) {
+        mul_class *e = dynamic_cast<mul_class*>(expr);
+        T1 = typecheck_expr(e->get_e1());
+        T2 = typecheck_expr(e->get_e2());
+        display = " * ";
+    } else {
+        divide_class *e = dynamic_cast<divide_class*>(expr);
+        T1 = typecheck_expr(e->get_e1());
+        T2 = typecheck_expr(e->get_e2());
+        display = " / ";
+    }
+    if (T1 != Int || T2 != Int) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "non-Int arguments: " 
+            << T1 << display << T2 << endl;
+        return Object;
+    }
+    return Int;
 }
 
 Symbol ClassTable::typecheck_equal(Expression expr) {
-
+    eq_class *e = dynamic_cast<eq_class*>(expr);
+    Symbol T_lhs = typecheck_expr(e->get_lhs());
+    Symbol T_rhs = typecheck_expr(e->get_rhs());
+    bool is_prim = false;
+    for (int i = 0; i != NUM_PRIMITIVES; ++i) {
+        if (T_lhs == prim_types[i]) {
+            is_prim = true;
+            break;
+        }
+        if (T_rhs == prim_types[i]) {
+            is_prim = true;
+            break;
+        }
+    }
+    if (is_prim) {
+        if (T_lhs != T_rhs) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "Illegal comparision with a basic type." << endl;
+            return Object;
+        }
+    }
+    return Bool;
 }
 
 /*** end of type checker ***/

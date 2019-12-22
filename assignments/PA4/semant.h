@@ -64,9 +64,9 @@ private:
   Symbol typecheck_case(Expression);
   Symbol typecheck_loop(Expression);
   Symbol typecheck_isvoid(Expression);
-  Symbol typecheck_neg(Expression);
-  Symbol typecheck_compare(Expression);
   Symbol typecheck_comp(Expression);
+  Symbol typecheck_compare(Expression);
+  Symbol typecheck_neg(Expression);
   Symbol typecheck_arith(Expression);
   Symbol typecheck_equal(Expression);
 

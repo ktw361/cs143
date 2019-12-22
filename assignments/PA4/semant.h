@@ -21,6 +21,9 @@ typedef ClassTable *ClassTableP;
 // you like: it is only here to provide a container for the supplied
 // methods.
 
+/* MtdValType: (T1, T2, ..., TN, TN+1)
+ * MtdValType[NUM_FORMALS] = N            */
+
 class ClassTable {
 private:
   static const int NUM_PRIMITIVES;
@@ -34,8 +37,6 @@ private:
   typedef SymbolTable<Symbol, Symbol> ObjEnvType;  // Object env
   typedef std::map<Symbol, ObjEnvType> ObjCacheType;
   typedef std::pair<Symbol, Symbol> MtdKeyType;
-  /* MtdValType: (T1, T2, ..., TN, TN+1)
-   * MtdValType[NUM_FORMALS] = N            */
   typedef std::map<int, Symbol>     MtdValType;
   typedef std::map<MtdKeyType, MtdValType*> MtdEnvType; // Method env
   ObjEnvType obj_env;
@@ -44,10 +45,13 @@ private:
   Class_   cls_env;
 
   // Helper function
+  bool is_prim_type(Symbol);
   int _add_formal_signatures(Feature);
   int _add_formal_ids(Feature);
   void _decl_class(Class_);
   void _check_method_body(Class_);
+  bool _check_inheritance_graph();
+
   // Type cheker
   Symbol typecheck_expr(Expression);
   Symbol typecheck_var(Expression);
@@ -75,7 +79,6 @@ private:
   Class_ Object_node;                   // Root of inheritance tree
   Symbol *prim_types;                   // Primitive types
   std::map<Symbol, Class_> ig_nodes;    // Inheritance Graph nodes
-  bool check_inheritance_graph();
   bool conform(Symbol, Symbol);         // type conformance
   Symbol lub(Symbol, Symbol);           // least upper bound
 

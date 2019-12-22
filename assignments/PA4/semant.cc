@@ -333,6 +333,13 @@ Symbol ClassTable::typecheck_string(Expression expr) {
 Symbol ClassTable::typecheck_new(Expression expr) {
     new__class *e = dynamic_cast<new__class*>(expr);
     Symbol T = e->get_type();
+    if (!ig_nodes.count(T)) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "'new' used with undefined class "
+            << T << ".\n";
+        return Object;
+    }
     expr->set_type(T == SELF_TYPE ? SELF_TYPE : T);
     return expr->get_type();
 }
@@ -350,14 +357,14 @@ Symbol ClassTable::typecheck_dispatch(Expression expr) {
         if (semant_debug) 
             cout <<  "[INFO] Method: " << name << " not found in class "
                 << T0 << ", searching parent..." << endl;
-        T0 = ig_nodes[T0]->get_parent();
-        key = std::make_pair(T0, name);
         if (T0 == Object) {
             semant_error();
             dump_fname_lineno(cerr, cls_env)
                 << "Dispatch to undefined method " << name << "." << endl;
             return Object;
         }
+        T0 = ig_nodes[T0]->get_parent();
+        key = std::make_pair(T0, name);
     }
     MtdValType signatures = *method_env[key];
     int num_formals_decl = *reinterpret_cast<int*>(signatures[NUM_FORMALS]);
@@ -464,6 +471,7 @@ Symbol ClassTable::typecheck_block(Expression expr) {
         T_tmp = typecheck_expr(exprs->nth(i));
     }
     obj_env.exitscope();
+    expr->set_type(T_tmp);
     return T_tmp;
 }
 
@@ -650,18 +658,7 @@ Symbol ClassTable::typecheck_equal(Expression expr) {
     eq_class *e = dynamic_cast<eq_class*>(expr);
     Symbol T_lhs = typecheck_expr(e->get_lhs());
     Symbol T_rhs = typecheck_expr(e->get_rhs());
-    bool is_prim = false;
-    for (int i = 0; i != NUM_PRIMITIVES; ++i) {
-        if (T_lhs == prim_types[i]) {
-            is_prim = true;
-            break;
-        }
-        if (T_rhs == prim_types[i]) {
-            is_prim = true;
-            break;
-        }
-    }
-    if (is_prim) {
+    if (is_prim_type(T_lhs) || is_prim_type(T_rhs)) {
         if (T_lhs != T_rhs) {
             semant_error();
             dump_fname_lineno(cerr, cls_env)
@@ -674,7 +671,7 @@ Symbol ClassTable::typecheck_equal(Expression expr) {
 }
 
 void ClassTable::typecheck_method(Feature feat) {
-    if (semant_debug) cout << "Method: " << cls_env->get_name() << endl;
+    if (semant_debug) cout << "Method: " << feat->get_name() << endl;
     MtdKeyType key = std::make_pair(cls_env->get_name(), feat->get_name());
     method_env[key] = new MtdValType();
     MtdValType signatures = *method_env[key];
@@ -739,7 +736,13 @@ void ClassTable::typecheck_attr(Feature feat) {
 
 /*** end of type checker ***/
 
-bool ClassTable::check_inheritance_graph() {
+bool ClassTable::is_prim_type(Symbol sym) {
+    for (int i = 0; i != NUM_PRIMITIVES; ++i)
+        if (sym == prim_types[i]) return true;
+    return false;
+}
+
+bool ClassTable::_check_inheritance_graph() {
     // Connect every IGnode(Class_) to its children
     typedef std::map<Symbol, Class_>::iterator _Iter;
     for (_Iter iter = ig_nodes.begin(); iter != ig_nodes.end(); ++iter) {
@@ -749,15 +752,13 @@ bool ClassTable::check_inheritance_graph() {
 
         Symbol parent = node->get_parent();
         // Make sure it does not inherit from primitive types
-        for (int i = 0; i != NUM_PRIMITIVES; ++i) {
-            if (parent == prim_types[i]) {
-                semant_error();
-                dump_fname_lineno(cerr, node)
-                    << "Class " << node->get_name()
-                    << " cannot inherits class " 
-                    << parent << "." << endl;
-                return false;
-            }
+        if (is_prim_type(parent)) {
+            semant_error();
+            dump_fname_lineno(cerr, node)
+                << "Class " << node->get_name()
+                << " cannot inherits class " 
+                << parent << "." << endl;
+            return false;
         }
         // Check inherit from undefined
         if (!ig_nodes.count(parent)) {
@@ -895,23 +896,23 @@ void ClassTable::_decl_class(Class_ cls) {
     obj_env.enterscope();
     cls_env = cls;
     // If is Object, search children directly
-    if (cls->get_name() == Object) {
-        for (IGnode_list *l = cls->get_children(); l != NULL; l = l->tl()) {
-            Class_ child = l->hd();
-            _decl_class(child);
-        }
-        obj_env_cache[cls->get_name()] = obj_env;  // save current scope
-        obj_env.exitscope();
-        return;
-    }
+    /* if (cls->get_name() == Object) { */
+    /*     for (IGnode_list *l = cls->get_children(); l != NULL; l = l->tl()) { */
+    /*         Class_ child = l->hd(); */
+    /*         _decl_class(child); */
+    /*     } */
+    /*     obj_env_cache[cls->get_name()] = obj_env;  // save current scope */
+    /*     obj_env.exitscope(); */
+    /*     return; */
+    /* } */
 
     // If primitive class, skip
-    for (int i = 0; i != NUM_PRIMITIVES; ++i) {
-        if (cls->get_name() == prim_types[i]) {
-            obj_env.exitscope();
-            return;
-        }
-    }
+    /* for (int i = 0; i != NUM_PRIMITIVES; ++i) { */
+    /*     if (cls->get_name() == prim_types[i]) { */
+    /*         obj_env.exitscope(); */
+    /*         return; */
+    /*     } */
+    /* } */
 
     // First add attr/methods
     if (semant_debug)  cout << "Declaring class: " << cls->get_name() << endl;
@@ -922,7 +923,8 @@ void ClassTable::_decl_class(Class_ cls) {
         if (f->is_method())
             typecheck_method(f);
         else
-            typecheck_attr(f);
+            if (!is_prim_type(cls_env->get_name()))
+                typecheck_attr(f);
     }
 
     // Then, dfs step, add sub class method signature / attrs / attr-expr
@@ -985,15 +987,12 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) 
         if (ig_nodes.count(cur->get_name())) {
             // check conflict with prim types
             bool redefine_prim = false;
-            for (int j = 0; j != NUM_PRIMITIVES; ++j) {
-                if (cur->get_name() == prim_types[j]) {
-                    redefine_prim = true;
-                    semant_error();
-                    dump_fname_lineno(cerr, cur)
-                        << "Redefinition of basic class " 
-                        << cur->get_name() << endl;
-                    break;
-                }
+            if (is_prim_type(cur->get_name())) {
+                redefine_prim = true;
+                semant_error();
+                dump_fname_lineno(cerr, cur)
+                    << "Redefinition of basic class " 
+                    << cur->get_name() << endl;
             }
             // multiple definition
             if (!redefine_prim) {
@@ -1005,12 +1004,12 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) 
         } else 
             ig_nodes[cur->get_name()] = cur;
     }
-    if (!check_inheritance_graph()) return;  // second pass
+    if (!_check_inheritance_graph()) return;  // second pass
         
     // Pass II: DFS inheritance graph from root to get correct scoping.
     if (semant_debug) cout << endl << "Second pass: _decl_class()" << endl;
     _decl_class(Object_node);
-    if (this->errors()) return;
+    /* if (this->errors()) return; */
     
     // Pass III, check method expr
     if (semant_debug) cout << endl << "Third pass: _check_method_body()" << endl;

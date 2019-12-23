@@ -730,6 +730,14 @@ void ClassTable::typecheck_method(Feature feat) {
         }
     }
     if (defined) {
+        // multiply defined within same class
+        if (T_search == cls_env->get_name()) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "Method " << name
+                << " is multiply defined." << endl;
+            return;
+        }
         if (semant_debug)
             cout << "[INFO] " << name << " found in "
                 << T_search << endl;
@@ -952,25 +960,6 @@ int ClassTable::_add_formal_ids(Feature feat) {
     return i;
 }
 
-void ClassTable::_decl_methods(Class_ cls) {
-    cls_env = cls;
-
-    // First add methods
-    if (semant_debug)  cout << "Declaring class: " << cls->get_name() << endl;
-    Features features = cls->get_features();
-    for (int i = features->first(); features->more(i); i = features->next(i)) {
-        Feature f = features->nth(i);
-        if (f->is_method())
-            typecheck_method(f);
-    }
-
-    // Then, dfs step, add sub class method signature
-    for (IGnode_list *l = cls->get_children(); l != NULL; l = l->tl()) {
-        Class_ child = l->hd();
-        _decl_methods(child);
-    }
-}
-
 void ClassTable::_check_method_body(Class_ cls) {
     obj_env = obj_env_cache[cls->get_name()];
     cls_env = cls;
@@ -1020,6 +1009,25 @@ void ClassTable::_decl_attrs(Class_ cls) {
     }
     obj_env_cache[cls->get_name()] = obj_env;  // save current scope
     obj_env.exitscope();
+}
+
+void ClassTable::_decl_methods(Class_ cls) {
+    cls_env = cls;
+
+    // First add methods
+    if (semant_debug)  cout << "Declaring class: " << cls->get_name() << endl;
+    Features features = cls->get_features();
+    for (int i = features->first(); features->more(i); i = features->next(i)) {
+        Feature f = features->nth(i);
+        if (f->is_method())
+            typecheck_method(f);
+    }
+
+    // Then, dfs step, add sub class method signature
+    for (IGnode_list *l = cls->get_children(); l != NULL; l = l->tl()) {
+        Class_ child = l->hd();
+        _decl_methods(child);
+    }
 }
 
 bool ClassTable::_check_inheritance_graph() {

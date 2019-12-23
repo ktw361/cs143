@@ -193,6 +193,8 @@ Symbol is a pointer(address), but also act as an unique id.
  4th pass: check method expr
 
 6. in cool lang, all method are virtual.
+Note for overriding parent method, num of args and type of each arg is checked.
+The return type is not checked.
 
 7. Cases that I failed to considef before seeing the test-cases:
  assignment to self,

@@ -354,7 +354,7 @@ Symbol ClassTable::typecheck_dispatch(Expression expr) {
     if (semant_debug)  
         cout << "[INFO] e0 type: " << T0 << " -> " << T_search << endl;
 
-    MtdKeyType key = std::make_pair(T0, name);
+    MtdKeyType key = std::make_pair(T_search, name);
     while(!method_env.count(key)) {
         if (semant_debug) 
             cout <<  "[INFO] Method " << name << " not found in class "

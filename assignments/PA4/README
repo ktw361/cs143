@@ -187,8 +187,9 @@ Symbol is a pointer(address), but also act as an unique id.
 
 5. About passes
  1st pass: gather class inheritance graph and check well-formed
- 2nd pass: gather method_env, check formals
- 3rd pass: TODO
+ 2nd pass: gather method_env, check method formals (method_env need)
+ 3rd pass: add attr/check expr (obj_env need)
+ 4th pass: check method expr
 
 6. in cool lang, all method are virtual.
 

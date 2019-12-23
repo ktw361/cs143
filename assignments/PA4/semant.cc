@@ -771,76 +771,6 @@ bool ClassTable::is_prim_type(Symbol sym) {
     return false;
 }
 
-bool ClassTable::_check_inheritance_graph() {
-    // Connect every IGnode(Class_) to its children
-    typedef std::map<Symbol, Class_>::iterator _Iter;
-    for (_Iter iter = ig_nodes.begin(); iter != ig_nodes.end(); ++iter) {
-        Class_ node = iter->second;
-        // Skip Object
-        if (node->get_name() == Object) continue;
-
-        Symbol parent = node->get_parent();
-        // Make sure it does not inherit from primitive types
-        if (is_prim_type(parent)) {
-            semant_error();
-            dump_fname_lineno(cerr, node)
-                << "Class " << node->get_name()
-                << " cannot inherits class " 
-                << parent << "." << endl;
-            return false;
-        }
-        // Check inherit from undefined
-        if (!ig_nodes.count(parent)) {
-            semant_error();
-            dump_fname_lineno(cerr, node)
-                << "Class " << node->get_name()
-                << " inherits from an undefined class " 
-                << parent << "." << endl;
-            return false;
-        } 
-        Class_ parent_node = ig_nodes[parent];
-        parent_node->add_children(node);
-        if (semant_debug) {
-            cout << "Adding: " << node->get_name() << " to child of " 
-                << parent_node->get_name()<< endl;
-        }
-    }
-
-    // BFS
-    std::map<Class_, bool> visited;
-    std::deque<Class_> que;
-    que.push_back(Object_node); // start bfs from root
-    while(!que.empty()) {
-        Class_ node = que.front();
-        if (semant_debug)
-            cout << "BFSing: " << node->get_name() << endl;
-        que.pop_front();
-        visited[node] = true;
-
-        for (IGnode_list *l = node->get_children(); l != NULL; l = l->tl()) {
-            Class_ child = l->hd();
-            // No need to check multiple inheritance, its done by Grammar/parser
-            que.push_back(child);
-        }
-    }
-    // For those no visited by bfs, cycle must occurs.
-    bool flag = true;
-    for (_Iter iter = ig_nodes.begin(); iter != ig_nodes.end(); ++iter) {
-        Class_ node = iter->second;
-        if (visited.count(node)) continue;
-        else {
-            semant_error();
-            dump_fname_lineno(cerr, node)
-                << "Class " << node->get_name() 
-                << ", or an ancestor of " << node->get_name()
-                << ", is involved in an inheritance cycle." << endl;
-            flag = false;
-        }
-    }
-
-    return flag;
-}
-
 bool ClassTable::conform(Symbol lhs, Symbol rhs) {
     if (lhs == rhs) return true;
     if (lhs == SELF_TYPE) return conform(cls_env->get_name(), rhs);
@@ -939,29 +869,23 @@ int ClassTable::_add_formal_ids(Feature feat) {
     return i;
 }
 
-void ClassTable::_decl_class(Class_ cls) {
-    obj_env.enterscope();
+void ClassTable::_decl_methods(Class_ cls) {
     cls_env = cls;
 
-    // First add attr/methods
+    // First add methods
     if (semant_debug)  cout << "Declaring class: " << cls->get_name() << endl;
     Features features = cls->get_features();
     for (int i = features->first(); features->more(i); i = features->next(i)) {
         Feature f = features->nth(i);
         if (f->is_method())
             typecheck_method(f);
-        else
-            if (!is_prim_type(cls_env->get_name()))
-                typecheck_attr(f);
     }
 
-    // Then, dfs step, add sub class method signature / attrs / attr-expr
+    // Then, dfs step, add sub class method signature
     for (IGnode_list *l = cls->get_children(); l != NULL; l = l->tl()) {
         Class_ child = l->hd();
-        _decl_class(child);
+        _decl_methods(child);
     }
-    obj_env_cache[cls->get_name()] = obj_env;  // save current scope
-    obj_env.exitscope();
 }
 
 void ClassTable::_check_method_body(Class_ cls) {
@@ -993,6 +917,133 @@ void ClassTable::_check_method_body(Class_ cls) {
     }
 }
 
+void ClassTable::_decl_attrs(Class_ cls) {
+    obj_env.enterscope();
+    cls_env = cls;
+
+    if (semant_debug)  cout << "Attr adding: " << cls->get_name() << endl;
+    Features features = cls->get_features();
+    for (int i = features->first(); features->more(i); i = features->next(i)) {
+        Feature f = features->nth(i);
+        if (f->is_method()) continue;
+        if (is_prim_type(cls_env->get_name())) continue;
+        typecheck_attr(f);
+    }
+
+    // Then, dfs step, add sub class attrs / attr-expr
+    for (IGnode_list *l = cls->get_children(); l != NULL; l = l->tl()) {
+        Class_ child = l->hd();
+        _decl_attrs(child);
+    }
+    obj_env_cache[cls->get_name()] = obj_env;  // save current scope
+    obj_env.exitscope();
+}
+
+bool ClassTable::_check_inheritance_graph() {
+    // Connect every IGnode(Class_) to its children
+    typedef std::map<Symbol, Class_>::iterator _Iter;
+    for (_Iter iter = ig_nodes.begin(); iter != ig_nodes.end(); ++iter) {
+        Class_ node = iter->second;
+        // Skip Object
+        if (node->get_name() == Object) continue;
+
+        Symbol parent = node->get_parent();
+        // Make sure it does not inherit from primitive types
+        if (is_prim_type(parent)) {
+            semant_error();
+            dump_fname_lineno(cerr, node)
+                << "Class " << node->get_name()
+                << " cannot inherits class " 
+                << parent << "." << endl;
+            return false;
+        }
+        // Check inherit from undefined
+        if (!ig_nodes.count(parent)) {
+            semant_error();
+            dump_fname_lineno(cerr, node)
+                << "Class " << node->get_name()
+                << " inherits from an undefined class " 
+                << parent << "." << endl;
+            return false;
+        } 
+        Class_ parent_node = ig_nodes[parent];
+        parent_node->add_children(node);
+        if (semant_debug) {
+            cout << "Adding: " << node->get_name() << " to child of " 
+                << parent_node->get_name()<< endl;
+        }
+    }
+
+    // BFS
+    std::map<Class_, bool> visited;
+    std::deque<Class_> que;
+    que.push_back(Object_node); // start bfs from root
+    while(!que.empty()) {
+        Class_ node = que.front();
+        if (semant_debug)
+            cout << "BFSing: " << node->get_name() << endl;
+        que.pop_front();
+        visited[node] = true;
+
+        for (IGnode_list *l = node->get_children(); l != NULL; l = l->tl()) {
+            Class_ child = l->hd();
+            // No need to check multiple inheritance, its done by Grammar/parser
+            que.push_back(child);
+        }
+    }
+    // For those no visited by bfs, cycle must occurs.
+    bool flag = true;
+    for (_Iter iter = ig_nodes.begin(); iter != ig_nodes.end(); ++iter) {
+        Class_ node = iter->second;
+        if (visited.count(node)) continue;
+        else {
+            semant_error();
+            dump_fname_lineno(cerr, node)
+                << "Class " << node->get_name() 
+                << ", or an ancestor of " << node->get_name()
+                << ", is involved in an inheritance cycle." << endl;
+            flag = false;
+        }
+    }
+
+    return flag;
+}
+
+void ClassTable::_check_ignodes(Classes classes) {
+    if (semant_debug)
+        cout <<  "Num classes: " << classes->len() << endl;
+    // Gather class infos into ig_nodes, 1st pass
+    for (int i = classes->first(); classes->more(i); i = classes->next(i)) {
+        Class_ cur = classes->nth(i);
+        if (semant_debug) {
+            cout << "Gathering: " << cur->get_name() << endl;
+        }
+        if (ig_nodes.count(cur->get_name())) {
+            // conflict with prim types?
+            bool redefine_prim = false;
+            if (is_prim_type(cur->get_name())) {
+                redefine_prim = true;
+                semant_error();
+                dump_fname_lineno(cerr, cur)
+                    << "Redefinition of basic class " 
+                    << cur->get_name() << endl;
+            }
+            // multiple definition?
+            if (!redefine_prim) {
+                semant_error();
+                dump_fname_lineno(cerr, cur)
+                    << "Class " << cur->get_name()
+                    << " was previously defined." << endl;
+            }
+        } else if (cur->get_name() == SELF_TYPE) {
+            semant_error();
+            dump_fname_lineno(cerr, cur)
+                << "Redefinition of basic class SELF_TYPE." << endl;
+        } else 
+            ig_nodes[cur->get_name()] = cur;
+    }
+}
+
 ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) {
 
     /* Fill this in */
@@ -1003,46 +1054,23 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) 
 
     // Pass I: Check inheritance graph()
     install_basic_classes();
-    if (semant_debug)
-        cout <<  "Num classes: " << classes->len() << endl;
-    // Gather class infos into ig_nodes, 1st pass
-    for (int i = classes->first(); classes->more(i); i = classes->next(i)) {
-        Class_ cur = classes->nth(i);
-        if (semant_debug) {
-            cout << "Gathering: " << cur->get_name() << endl;
-        }
-        if (ig_nodes.count(cur->get_name())) {
-            // check conflict with prim types
-            bool redefine_prim = false;
-            if (is_prim_type(cur->get_name())) {
-                redefine_prim = true;
-                semant_error();
-                dump_fname_lineno(cerr, cur)
-                    << "Redefinition of basic class " 
-                    << cur->get_name() << endl;
-            }
-            // multiple definition
-            if (!redefine_prim) {
-                semant_error();
-                dump_fname_lineno(cerr, cur)
-                    << "Class " << cur->get_name()
-                    << " was previously defined." << endl;
-            }
-        } else 
-            ig_nodes[cur->get_name()] = cur;
-    }
+    _check_ignodes(classes);
     if (!_check_inheritance_graph()) return;  // second pass
         
-    // Pass II: DFS inheritance graph from root to get correct scoping.
-    if (semant_debug) cout << endl << "Second pass: _decl_class()" << endl;
-    _decl_class(Object_node);
-    /* if (this->errors()) return; */
+    // Pass II: DFS inheritance graph from root,  adding method declaration.
+    if (semant_debug) cout << endl << "Second pass: _decl_methods()" << endl;
+    _decl_methods(Object_node);
+    /* if (this->errors()) return; */ // TODO
+
+    // Pass III, check/add attr
+    if (semant_debug) cout << endl << "Third pass: _decl_attrs()" << endl;
+    _decl_attrs(Object_node);
     
-    // Pass III, check method expr
-    if (semant_debug) cout << endl << "Third pass: _check_method_body()" << endl;
-    for (int i = classes->first(); classes->more(i); i = classes->next(i)) {
+    // Pass IV, check method expr
+    if (semant_debug) 
+        cout << endl << "Fourth pass: _check_method_body()" << endl;
+    for (int i = classes->first(); classes->more(i); i = classes->next(i))
         _check_method_body(classes->nth(i));
-    }
 }
 
 void ClassTable::install_basic_classes() {

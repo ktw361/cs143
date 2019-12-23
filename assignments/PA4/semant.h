@@ -33,6 +33,7 @@ private:
   int semant_errors;
   void install_basic_classes();
   ostream& error_stream;
+
   // TypeEnv
   typedef SymbolTable<Symbol, Symbol> ObjEnvType;  // Object env
   typedef std::map<Symbol, ObjEnvType> ObjCacheType;
@@ -48,9 +49,11 @@ private:
   bool is_prim_type(Symbol);
   int _add_formal_signatures(Feature);
   int _add_formal_ids(Feature);
-  void _decl_class(Class_);
   void _check_method_body(Class_);
+  void _decl_attrs(Class_);
+  void _decl_methods(Class_);
   bool _check_inheritance_graph();
+  void _check_ignodes(Classes);
 
   // Type cheker
   Symbol typecheck_expr(Expression);

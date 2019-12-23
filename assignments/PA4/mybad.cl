@@ -11,7 +11,7 @@ class C {
     run(self : Int) : Object {
         new Object
     };
-	init(x : Int, y : Bool) : Int {
+	init(x : Int, x : Bool) : Int {
         {
         run(a);
         a1;

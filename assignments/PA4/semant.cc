@@ -333,7 +333,7 @@ Symbol ClassTable::typecheck_string(Expression expr) {
 Symbol ClassTable::typecheck_new(Expression expr) {
     new__class *e = dynamic_cast<new__class*>(expr);
     Symbol T = e->get_type();
-    if (!ig_nodes.count(T)) {
+    if (T != SELF_TYPE && !ig_nodes.count(T)) {
         semant_error();
         dump_fname_lineno(cerr, cls_env)
             << "'new' used with undefined class "
@@ -491,7 +491,7 @@ Symbol ClassTable::typecheck_let(Expression expr) {
     let_class *e = dynamic_cast<let_class*>(expr);
     Symbol T0 = e->get_type();
     T0 = (T0 == SELF_TYPE) ? SELF_TYPE : T0;
-    if (!ig_nodes.count(T0)) {
+    if (T0 != SELF_TYPE && !ig_nodes.count(T0)) {
         semant_error();
         dump_fname_lineno(cerr, cls_env)
             << "Class " << e->get_type()
@@ -700,16 +700,15 @@ void ClassTable::typecheck_method(Feature feat) {
     MtdValType signatures = *method_env[key];
     int num_formals = _add_formal_signatures(feat);
     // check method return type defined
-    if (feat->get_type() == SELF_TYPE)
-        signatures[num_formals] = SELF_TYPE;
-    else if (!ig_nodes.count(feat->get_type())) {
+    Symbol return_type =feat->get_type();
+    if (return_type != SELF_TYPE && !ig_nodes.count(return_type)) {
         semant_error();
         dump_fname_lineno(cerr, cls_env)
-            << "Undefined return type " << feat->get_type()   
+            << "Undefined return type " << return_type   
             << " in method " << feat->get_name() << "." << endl;
         signatures[num_formals] = Object;
     } else 
-        signatures[num_formals] = feat->get_type();
+        signatures[num_formals] = return_type;
 }
 
 void ClassTable::typecheck_attr(Feature feat) {
@@ -733,7 +732,7 @@ void ClassTable::typecheck_attr(Feature feat) {
         return;
     }
     // check attr type defined
-    if (!ig_nodes.count(type_decl)) {
+    if (type_decl != SELF_TYPE && !ig_nodes.count(type_decl)) {
         semant_error();
         dump_fname_lineno(cerr, cls_env)
             << "Class " << type_decl

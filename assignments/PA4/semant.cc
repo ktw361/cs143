@@ -350,13 +350,11 @@ Symbol ClassTable::typecheck_dispatch(Expression expr) {
     Symbol name = e->get_name();  // name f
     Expressions actual = e->get_actual();
     Symbol T0 = typecheck_expr(e0);
-    if (semant_debug)  cout << "[INFO] e0 type: " << T0 << " -> ";
-    if (T0 == SELF_TYPE)
-        T0 = cls_env->get_name();
-    if (semant_debug)  cout << T0 << endl;
+    Symbol T_search = (T0 == SELF_TYPE) ? cls_env->get_name() : T0;
+    if (semant_debug)  
+        cout << "[INFO] e0 type: " << T0 << " -> " << T_search << endl;
 
     MtdKeyType key = std::make_pair(T0, name);
-    Symbol T_search = T0;
     while(!method_env.count(key)) {
         if (semant_debug) 
             cout <<  "[INFO] Method " << name << " not found in class "
@@ -892,11 +890,12 @@ int ClassTable::_add_formal_signatures(Feature feat) {
     MtdValType &signatures = *method_env[key];
     for (int i = formals->first(); formals->more(i); i = formals->next(i)) {
         Formal form = formals->nth(i);
+        Symbol param = form->get_name();
         if (semant_debug)
-            cout << " Check Formal signature: " << form->get_name() << ", type: "
+            cout << " Check Formal signature: " << param << ", type: "
                 << form->get_type() << endl;
         // 'self' as formal name
-        if (form->get_name() == self) {
+        if (param == self) {
             semant_error();
             dump_fname_lineno(cerr, cls_env)
                 << "'self' cannot be the name of a formal parameter" << endl;
@@ -906,7 +905,7 @@ int ClassTable::_add_formal_signatures(Feature feat) {
             semant_error();
             dump_fname_lineno(cerr, cls_env)
                 << "Class " << form->get_type()
-                << " of formal paramer " << form->get_name()
+                << " of formal paramer " << param
                 << " is undefined." << endl;
             signatures[i] = Object;
         } else 
@@ -920,12 +919,22 @@ int ClassTable::_add_formal_signatures(Feature feat) {
 int ClassTable::_add_formal_ids(Feature feat) {
     Formals formals = feat->get_formals();
     int i = 0;
+    std::map<Symbol, bool> param_cache;
     for (i = formals->first(); formals->more(i); i = formals->next(i)) {
         Formal form = formals->nth(i);
+        Symbol param = form->get_name();
         if (semant_debug)
-            cout << " Add Formal id: " << form->get_name() << ", type: "
+            cout << " Add Formal id: " << param << ", type: "
                 << form->get_type() << endl;
-        obj_env.addid(form->get_name(), new Symbol(form->get_type()));
+        // Check duplicate. If dup, overwrite previous
+        if (param_cache.count(param)) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "Formal parameter " << param
+                << " is multiply defined." << endl;
+        } else 
+            param_cache[param] = true;
+        obj_env.addid(param, new Symbol(form->get_type()));
     }
     return i;
 }

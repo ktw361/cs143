@@ -168,6 +168,7 @@ types of semantic errors:
  multiple definition of class;
  inherits from primitive types: Int Bool Str
  inherits from undefined classes
+ ...
 
 
 Some design notes:
@@ -195,15 +196,3 @@ Symbol is a pointer(address), but also act as an unique id.
 
 7. Cases that I failed to considef before seeing the test-cases:
  assignment to self,
-
-
-1. What requirements do I need to check?
-
-
-2. When do I need to check a requirement?
-
-
-3. When is the information needed to check a requirement generated?
-
-
-4. Where is the information I need to check a requirement?

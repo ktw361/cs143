@@ -300,7 +300,6 @@ Symbol ClassTable::typecheck_assign(Expression expr) {
     Symbol T, *pT = obj_env.lookup(id);
     // Assign to undeclared?
     if (pT == NULL) {
-        // TODO
         dump_fname_lineno(cerr, cls_env)
             << "Assignment to undeclared variable "
             << id << "." << endl;
@@ -312,7 +311,6 @@ Symbol ClassTable::typecheck_assign(Expression expr) {
     Symbol T1 = typecheck_expr(e1);
     if (!conform(T1, T)) {
         semant_error();
-        // TODO
         dump_fname_lineno(cerr, cls_env)
             << "Type " << T1 << " of assigned expression does not"
             << " conform to declared type " << T 
@@ -456,7 +454,7 @@ Symbol ClassTable::typecheck_static_dispatch(Expression expr) {
             return Object;
         }
     }
-    Symbol T_ret = signatures[actual->len()+1];
+    Symbol T_ret = signatures[actual->len()];
     if (semant_debug)
         cout << "Method " << name << " return type: " << T_ret << " -> ";
     T_ret = (T_ret == SELF_TYPE) ? T0 : T_ret;
@@ -478,7 +476,7 @@ Symbol ClassTable::typecheck_cond(Expression expr) {
             << T1 << ")." << endl;
         return Object;
     }
-    expr->set_type(lub(T2, T3)); // TODO
+    expr->set_type(lub(T2, T3));
     return expr->get_type();
 }
 
@@ -716,7 +714,6 @@ void ClassTable::typecheck_method(Feature feat) {
     bool defined = true;
     Symbol T_search = cls_env->get_name();
     Symbol name = feat->get_name();
-    // TODO, same name in same class ??
     if (T_search == Object || T_search == IO || is_prim_type(T_search))
         defined = false;
     else {
@@ -899,8 +896,6 @@ void ClassTable::_check_formal_conformance(
                 << signatures[i] << endl;
         }
     }
-    // TODO ret type?
-    /* signatures[formals->len()] = feat->get_type(); */
 }
 
 int ClassTable::_add_formal_signatures(Feature feat) {
@@ -1148,7 +1143,6 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) 
     // Pass II: DFS inheritance graph from root,  adding method declaration.
     if (semant_debug) cout << endl << "Second pass: _decl_methods()" << endl;
     _decl_methods(Object_node);
-    /* if (this->errors()) return; */ // TODO
 
     // Pass III, check/add attr
     if (semant_debug) cout << endl << "Third pass: _decl_attrs()" << endl;

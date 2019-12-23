@@ -290,7 +290,15 @@ Symbol ClassTable::typecheck_var(Expression expr) {
 Symbol ClassTable::typecheck_assign(Expression expr) {
     assign_class *e = dynamic_cast<assign_class*>(expr);
     Symbol id = e->get_name();
+    // Test self assignment
+    if (id == self) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Cannot assign to 'self'." << endl;
+        return Object;
+    }
     Symbol T, *pT = obj_env.lookup(id);
+    // Assign to undeclared?
     if (pT == NULL) {
         // TODO
         dump_fname_lineno(cerr, cls_env)
@@ -519,9 +527,17 @@ Symbol ClassTable::typecheck_let(Expression expr) {
     }
 
     // Let-Init
-    //
     // First check init expr without definition of new identifier
     Symbol init_type = typecheck_expr(e->get_init());
+    if (!conform(init_type, T0)) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Inferred type " << init_type
+            << " of initialization of " << e->get_iden()
+            << " does not conform to identifier's declared type "
+            << T0 << "." << endl;
+        return Object;
+    }
 
     // Then add new identifier and check body
     obj_env.enterscope();
@@ -696,19 +712,49 @@ Symbol ClassTable::typecheck_equal(Expression expr) {
 void ClassTable::typecheck_method(Feature feat) {
     if (semant_debug) cout << "Method: " << feat->get_name() << endl;
     MtdKeyType key = std::make_pair(cls_env->get_name(), feat->get_name());
-    method_env[key] = new MtdValType();
-    MtdValType signatures = *method_env[key];
-    int num_formals = _add_formal_signatures(feat);
-    // check method return type defined
-    Symbol return_type =feat->get_type();
-    if (return_type != SELF_TYPE && !ig_nodes.count(return_type)) {
-        semant_error();
-        dump_fname_lineno(cerr, cls_env)
-            << "Undefined return type " << return_type   
-            << " in method " << feat->get_name() << "." << endl;
-        signatures[num_formals] = Object;
-    } else 
-        signatures[num_formals] = return_type;
+    MtdKeyType key_search = key;
+    bool defined = true;
+    Symbol T_search = cls_env->get_name();
+    Symbol name = feat->get_name();
+    // TODO, same name in same class ??
+    if (T_search == Object || T_search == IO || is_prim_type(T_search))
+        defined = false;
+    else {
+        while(!method_env.count(key_search)) {
+            if (semant_debug)
+                cout <<  "[INFO] Declaring " << name << ", not found in class "
+                    << T_search << ", searching parent..." << endl;
+            if (T_search == Object) {
+                defined = false;
+                break;
+            }
+            T_search = ig_nodes[T_search]->get_parent();
+            key_search = std::make_pair(T_search, name);
+        }
+    }
+    if (defined) {
+        if (semant_debug)
+            cout << "[INFO] " << name << " found in "
+                << T_search << endl;
+        // Overriding parent, check signature conformance
+        MtdValType &signatures = *method_env[key_search];
+        _check_formal_conformance(feat, signatures);
+    } else {
+        // New method
+        method_env[key] = new MtdValType();
+        int num_formals = _add_formal_signatures(feat);
+        MtdValType &signatures = *method_env[key];
+        // check method return type defined
+        Symbol return_type =feat->get_type();
+        if (return_type != SELF_TYPE && !ig_nodes.count(return_type)) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "Undefined return type " << return_type   
+                << " in method " << feat->get_name() << "." << endl;
+            signatures[num_formals] = Object;
+        } else 
+            signatures[num_formals] = return_type;
+    }
 }
 
 void ClassTable::typecheck_attr(Feature feat) {
@@ -723,7 +769,7 @@ void ClassTable::typecheck_attr(Feature feat) {
             << "'self' cannot be the name of an attribute." << endl;
         return;
     }
-    // check overwrite parent attribute
+    // check overrite parent attribute
     if (obj_env.lookup(name)) {
         semant_error();
         dump_fname_lineno(cerr, cls_env)
@@ -770,6 +816,19 @@ bool ClassTable::is_prim_type(Symbol sym) {
     return false;
 }
 
+void ClassTable::_find_main(Classes classes) {
+    bool has_main = false;
+    for (int i = classes->first(); classes->more(i); i = classes->next(i))
+        if (classes->nth(i)->get_name() == Main) {
+            has_main = true;
+            break;
+        }
+    if (!has_main) {
+        semant_error();
+        cerr << "Class Main is not defined." << endl;
+    }
+}
+
 bool ClassTable::conform(Symbol lhs, Symbol rhs) {
     if (lhs == rhs) return true;
     if (lhs == SELF_TYPE) return conform(cls_env->get_name(), rhs);
@@ -812,10 +871,41 @@ Symbol ClassTable::lub(Symbol a, Symbol b) {
     return ret;
 }
 
+void ClassTable::_check_formal_conformance(
+        Feature feat, MtdValType &signatures) {
+    Formals formals = feat->get_formals();
+    // Check num args
+    if (*reinterpret_cast<int*>(signatures[NUM_FORMALS]) 
+            != formals->len()) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Incompatible number of formal parameters in "
+            "redefined method " << feat->get_name() << "." << endl;
+        return;
+    }
+
+    for (int i = formals->first(); formals->more(i); i = formals->next(i)) {
+        Formal form = formals->nth(i);
+        Symbol param = form->get_name();
+        if (semant_debug)
+            cout << " Check Formal conformance: " << param << ", type: "
+                << form->get_type() << endl;
+        if (form->get_type() != signatures[i]) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "In redefined method " << feat->get_name()
+                << ", parameter type " << form->get_type() 
+                << " is different from original type "
+                << signatures[i] << endl;
+        }
+    }
+    // TODO ret type?
+    /* signatures[formals->len()] = feat->get_type(); */
+}
+
 int ClassTable::_add_formal_signatures(Feature feat) {
     Formals formals = feat->get_formals();
     MtdKeyType key = std::make_pair(cls_env->get_name(), feat->get_name());
-    method_env[key] = new MtdValType();
     MtdValType &signatures = *method_env[key];
     for (int i = formals->first(); formals->more(i); i = formals->next(i)) {
         Formal form = formals->nth(i);
@@ -855,7 +945,6 @@ int ClassTable::_add_formal_ids(Feature feat) {
         if (semant_debug)
             cout << " Add Formal id: " << param << ", type: "
                 << form->get_type() << endl;
-        // Check duplicate. If dup, overwrite previous
         if (param_cache.count(param)) {
             semant_error();
             dump_fname_lineno(cerr, cls_env)
@@ -1070,6 +1159,9 @@ ClassTable::ClassTable(Classes classes) : semant_errors(0) , error_stream(cerr) 
         cout << endl << "Fourth pass: _check_method_body()" << endl;
     for (int i = classes->first(); classes->more(i); i = classes->next(i))
         _check_method_body(classes->nth(i));
+
+    // Check if 'Main' defined
+    _find_main(classes);
 }
 
 void ClassTable::install_basic_classes() {

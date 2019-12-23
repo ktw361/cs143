@@ -193,6 +193,9 @@ Symbol is a pointer(address), but also act as an unique id.
 
 6. in cool lang, all method are virtual.
 
+7. Cases that I failed to considef before seeing the test-cases:
+ assignment to self,
+
 
 1. What requirements do I need to check?
 

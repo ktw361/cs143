@@ -47,6 +47,8 @@ private:
 
   // Helper function
   bool is_prim_type(Symbol);
+  void _find_main(Classes classes);
+  void _check_formal_conformance(Feature, MtdValType &);
   int _add_formal_signatures(Feature);
   int _add_formal_ids(Feature);
   void _check_method_body(Class_);

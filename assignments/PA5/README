@@ -151,4 +151,177 @@ Instructions
 
 Write-up for PA5
 ----------------
+Int:
+    -1
+    -----
+    Tag=_int_tag
+    -----
+    size=4
+    -----
+    Int_dispTab
+    -----
+    val
+    -----
 
+Bool:
+    -1
+    -----
+    Tag=_bool_tag
+    -----
+    size=4
+    -----
+    Bool_dispTab
+    -----
+    val
+    -----
+
+String:
+    -1
+    -----
+    Tag=_string_tag
+    -----
+    size=6/5
+    -----
+    String_dispTab
+    -----
+    .word int_const (ptr to int)
+    -----
+    .ascii "actual seq"
+    .byte 0
+    .align
+    -----
+
+void = 0
+
+Not from runtime?
+Object_protObj:
+    -1
+    -----
+    Tag=0 (possibly)
+    -----
+    size=3
+    -----
+IO_protoObj:
+    -1
+    -----
+    Tag=1 (possibly)
+    -----
+    size=4
+    -----
+    IO_dispTab
+    -----
+
+Main_protObj:
+    -1
+    -----
+    Tag=2?
+    -----
+    size
+    -----
+    Main_dispTab
+    .global_heap_start?
+
+
+Some Examples:
+
+class_nameTab:
+	.word	str_const2
+	.word	str_const3
+	.word	str_const4
+	.word	str_const5
+	.word	str_const6
+	.word	str_const7
+class_objTab:
+	.word	Object_protObj
+	.word	Object_init
+	.word	IO_protObj
+	.word	IO_init
+	.word	Main_protObj
+	.word	Main_init
+	.word	Int_protObj
+	.word	Int_init
+	.word	Bool_protObj
+	.word	Bool_init
+	.word	String_protObj
+	.word	String_init
+Object_dispTab:
+	.word	Object.abort
+	.word	Object.type_name
+	.word	Object.copy
+String_dispTab:
+	.word	Object.abort
+	.word	Object.type_name
+	.word	Object.copy
+	.word	String.length
+	.word	String.concat
+	.word	String.substr
+Bool_dispTab:
+	.word	Object.abort
+	.word	Object.type_name
+	.word	Object.copy
+Int_dispTab:
+	.word	Object.abort
+	.word	Object.type_name
+	.word	Object.copy
+IO_dispTab:
+	.word	Object.abort
+	.word	Object.type_name
+	.word	Object.copy
+	.word	IO.out_string
+	.word	IO.out_int
+	.word	IO.in_string
+	.word	IO.in_int
+Main_dispTab:
+	.word	Object.abort
+	.word	Object.type_name
+	.word	Object.copy
+	.word	IO.out_string
+	.word	IO.out_int
+	.word	IO.in_string
+	.word	IO.in_int
+	.word	Main.main
+	.word	-1
+Object_protObj:
+	.word	0
+	.word	3
+	.word	Object_dispTab
+	.word	-1
+String_protObj:
+	.word	5
+	.word	5
+	.word	String_dispTab
+	.word	int_const0
+	.word	0
+	.word	-1
+Bool_protObj:
+	.word	4
+	.word	4
+	.word	Bool_dispTab
+	.word	0
+	.word	-1
+Int_protObj:
+	.word	3
+	.word	4
+	.word	Int_dispTab
+	.word	0
+	.word	-1
+IO_protObj:
+	.word	1
+	.word	3
+	.word	IO_dispTab
+	.word	-1
+Main_protObj:
+	.word	2
+	.word	3
+	.word	Main_dispTab
+	.globl	heap_start
+heap_start:
+	.word	0
+	.text
+	.globl	Main_init
+	.globl	Int_init
+	.globl	String_init
+	.globl	Bool_init
+	.globl	Main.main
+Object_init:
+    ...

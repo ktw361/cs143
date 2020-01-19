@@ -1,3 +1,6 @@
+set ts=2
+set shiftwidth=2
+
 set tags+=../../include/PA5/.tags
 set path+=../../include/PA5/**
 

@@ -78,7 +78,7 @@ xname=$COOL_INST/bin/.$arch/xspim
 cd $COOL_INST/bin
 
 if [ -x $xname ]; then
-  exec $xname $*
+  exec $xname -font 6x10 $*
 else
   echo xspim is not compiled for $arch
 fi

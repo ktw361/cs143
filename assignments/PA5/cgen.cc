@@ -323,6 +323,14 @@ static void emit_push(char *reg, ostream& str)
 }
 
 //
+// Pop a register off the stack. The stack shrinks towards larger addresses.
+//
+static void emit_pop(ostream& str)
+{
+  emit_addiu(SP,SP,4,str);
+}
+
+//
 // Fetch the integer value in an Int object.
 // Emits code to fetch the integer value of the Integer object pointed
 // to by register source into the register dest
@@ -404,6 +412,7 @@ void StringEntry::code_def(ostream& s, int stringclasstag)
 
  /***** Add dispatch information for class String ******/
 
+      s << STRINGNAME << DISPTAB_SUFFIX;
       s << endl;                                              // dispatch table
       s << WORD;  lensym->code_ref(s);  s << endl;            // string length
   emit_string_constant(s,str);                                // ascii string
@@ -446,6 +455,7 @@ void IntEntry::code_def(ostream &s, int intclasstag)
 
  /***** Add dispatch information for class Int ******/
 
+      s << INTNAME << DISPTAB_SUFFIX;
       s << endl;                                          // dispatch table
       s << WORD << str << endl;                           // integer value
 }
@@ -490,6 +500,7 @@ void BoolConst::code_def(ostream& s, int boolclasstag)
 
  /***** Add dispatch information for class Bool ******/
 
+      s << BOOLNAME << DISPTAB_SUFFIX;
       s << endl;                                            // dispatch table
       s << WORD << val << endl;                             // value (0 or 1)
 }
@@ -619,9 +630,12 @@ void CgenClassTable::code_constants()
 
 CgenClassTable::CgenClassTable(Classes classes, ostream& s) : nds(NULL) , str(s)
 {
-   stringclasstag = 0 /* Change to your String class tag here */;
-   intclasstag =    0 /* Change to your Int class tag here */;
-   boolclasstag =   0 /* Change to your Bool class tag here */;
+   objectclasstag = 0;
+   ioclasstag     = 1;
+   mainclasstag   = 2;
+   intclasstag =    3 /* Change to your Int class tag here */;
+   boolclasstag =   4 /* Change to your Bool class tag here */;
+   stringclasstag = 5 /* Change to your String class tag here */;
 
    enterscope();
    if (cgen_debug) cout << "Building CgenClassTable" << endl;
@@ -833,6 +847,9 @@ void CgenClassTable::code()
 //                   - class_nameTab
 //                   - dispatch tables
 //
+  // 1st pass: gather layout for each class
+
+  // 2nd pass: emit prototype objects for each class
 
   if (cgen_debug) cout << "coding global text" << endl;
   code_global_text();
@@ -902,6 +919,12 @@ void let_class::code(ostream &s) {
 }
 
 void plus_class::code(ostream &s) {
+  this->e1.code(s);
+  emit_push(ACC, s);
+  this->e1.code(s);
+  emit_load(T1, 0, SP, s);
+  emit_add(ACC, T1, ACC, s);
+  emit_pop(s);
 }
 
 void sub_class::code(ostream &s) {

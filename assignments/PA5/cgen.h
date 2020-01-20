@@ -18,9 +18,12 @@ class CgenClassTable : public SymbolTable<Symbol,CgenNode> {
 private:
    List<CgenNode> *nds;
    ostream& str;
-   int stringclasstag;
-   int intclasstag;
-   int boolclasstag;
+   int objectclasstag;  // 0
+   int ioclasstag;      // 1
+   int mainclasstag;    // 2
+   int intclasstag;     // 3
+   int boolclasstag;    // 4
+   int stringclasstag;  // 5
 
 
 // The following methods emit code for

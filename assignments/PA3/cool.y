@@ -268,7 +268,7 @@ formal_list
 | formal_list ',' formal	/* several formals */
 { $$ = append_Formals($1, single_Formals($3)); }
 
-| %empty                    /* empty formals */
+|                           /* empty formals */
 { $$ = nil_Formals(); }
 ;
 

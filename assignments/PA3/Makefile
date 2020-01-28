@@ -2,7 +2,14 @@
 ASSN = 3
 CLASS= cs143
 CLASSDIR= ../..
-LIB=  -lfl 
+
+UNAME_S := $(shell uname -s)
+	ifeq ($(UNAME_S),Linux)
+		LIB += -lfl
+	endif
+	ifeq ($(UNAME_S),Darwin)
+		LIB += -ll
+	endif
 AR= gar
 ARCHIVE_NEW= -cr
 RANLIB= gar -qs

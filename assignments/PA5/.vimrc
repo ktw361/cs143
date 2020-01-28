@@ -6,6 +6,7 @@ set path+=../../include/PA5/**
 
 set makeprg=make\ dotest
 nnoremap <F3> :AsyncRun make<cr>
+nnoremap <F4> :AsyncRun make cgen<cr>
 " nnoremap <F4> :AsyncRun make semant && ./mysemant -s mygood.cl<cr>
 " nnoremap <F5> :AsyncRun make semant && ./mysemant -s mybad.cl<cr>
 " nnoremap <F6> :AsyncRun make dotest <cr>

@@ -919,9 +919,9 @@ void let_class::code(ostream &s) {
 }
 
 void plus_class::code(ostream &s) {
-  this->e1.code(s);
+  this->e1->code(s);
   emit_push(ACC, s);
-  this->e1.code(s);
+  this->e1->code(s);
   emit_load(T1, 0, SP, s);
   emit_add(ACC, T1, ACC, s);
   emit_pop(s);

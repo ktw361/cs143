@@ -807,6 +807,8 @@ void CgenClassTable::build_inheritance_tree()
       set_relations(nd);
 
       Symbol name = nd->get_name();
+      Symbol sym = idtable.lookup_string(name->get_string());
+      Symbol sym2 = stringtable.lookup_string(name->get_string());
       if (name == Object) 
         nd->set_tag(objectclasstag);
       else if (name == IO) 
@@ -819,8 +821,12 @@ void CgenClassTable::build_inheritance_tree()
         nd->set_tag(intclasstag);
       else if (name == Str)
         nd->set_tag(stringclasstag);
-      else
+      else {
         nd->set_tag(tags++);
+      }
+      printf("%x %x %x, ", name, sym, sym2);
+      cout << tags ;
+      printf(" %s\n", sym->get_string());
   }
 }
 

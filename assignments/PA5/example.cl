@@ -7,3 +7,10 @@ class Main {
   main():Int { 0 };
 };
 
+class C {
+  a : Int;
+};
+
+class Foo inherits C {
+  b : Int;
+};

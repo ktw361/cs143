@@ -153,8 +153,8 @@ Write-up for PA5
 ----------------
 Mynotes:
     CgenClassTable itself is a mapping <Class(Symbol), CgenNode>
-    class_nameTab is <Tag(int), class>
-    class_objTab is <Tag(int), classxxx...>
+    class_nameTab is <Tag(int), class name (String) > for runtime
+    class_objTab is <Tag(int), prototype object...> for runtime 
 
 TODO: Int uses val=char*?
 

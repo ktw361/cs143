@@ -642,6 +642,7 @@ CgenClassTable::CgenClassTable(Classes classes, ostream& s) : nds(NULL) , str(s)
    install_basic_classes();
    install_classes(classes);
    build_inheritance_tree();
+   /* set_classes_size(); */
 
    code();
    exitscope();
@@ -800,8 +801,27 @@ void CgenClassTable::install_classes(Classes cs)
 //
 void CgenClassTable::build_inheritance_tree()
 {
-  for(List<CgenNode> *l = nds; l; l = l->tl())
-      set_relations(l->hd());
+  tags = TAGS;
+  for(List<CgenNode> *l = nds; l; l = l->tl()) {
+      CgenNodeP nd = l->hd();
+      set_relations(nd);
+
+      Symbol name = nd->get_name();
+      if (name == Object) 
+        nd->set_tag(objectclasstag);
+      else if (name == IO) 
+        nd->set_tag(ioclasstag);
+      else if (name == Main)
+        nd->set_tag(mainclasstag);
+      else if (name == Bool)
+        nd->set_tag(boolclasstag);
+      else if (name == Int)
+        nd->set_tag(intclasstag);
+      else if (name == Str)
+        nd->set_tag(stringclasstag);
+      else
+        nd->set_tag(tags++);
+  }
 }
 
 //
@@ -828,6 +848,18 @@ void CgenNode::set_parentnd(CgenNodeP p)
   assert(p != NULL);
   parentnd = p;
 }
+
+//
+// CgenClassTable::set_classes_size
+//
+// Calcuate size field for each class
+//
+/* void CgenClassTable::set_classes_size() */ 
+/* { */
+/*   for(List<CgenNode> *l = nds; l; l = l->tl()) { */
+/*       set_relations(l->hd()); */
+/*   } */
+/* } */
 
 
 

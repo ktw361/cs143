@@ -7,6 +7,7 @@
 enum Basicness     {Basic, NotBasic};
 #define TRUE 1
 #define FALSE 0
+#define TAGS 6
 
 class CgenClassTable;
 typedef CgenClassTable *CgenClassTableP;
@@ -24,6 +25,7 @@ private:
    int intclasstag;     // 3
    int boolclasstag;    // 4
    int stringclasstag;  // 5
+   int tags;          // global counter
 
 
 // The following methods emit code for
@@ -58,6 +60,8 @@ private:
    List<CgenNode> *children;                  // Children of class
    Basicness basic_status;                    // `Basic' if class is basic
                                               // `NotBasic' otherwise
+   int tag;
+   int objsize;
 
 public:
    CgenNode(Class_ c,
@@ -69,6 +73,8 @@ public:
    void set_parentnd(CgenNodeP p);
    CgenNodeP get_parentnd() { return parentnd; }
    int basic() { return (basic_status == Basic); }
+   void set_tag(int _tag) { tag = _tag; }
+   int size() { return objsize; }
 };
 
 class BoolConst 

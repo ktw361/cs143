@@ -32,6 +32,9 @@ private:
    int mainclasstag;    // 5
    int tags;          // global counter
 
+   typedef SymbolTable<int, Entry> NameTabT; // <tag, CgenNode>
+   NameTabT *name_tab;
+
 
 // The following methods emit code for
 // constants and global declarations.
@@ -42,6 +45,8 @@ private:
    void code_select_gc();
    void code_constants();
 
+   void code_name_table();
+   void code_obj_table();
    void code_proto_obj();
    void code_disp_table();
 

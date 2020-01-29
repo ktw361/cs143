@@ -629,6 +629,30 @@ void CgenClassTable::code_constants()
   code_bools(boolclasstag);
 }
 
+// 
+// Emit code for class_nameTab
+//
+void CgenClassTable::code_name_table()
+{
+  // emit class_nameTab
+  str << CLASSNAMETAB << LABEL;
+  for (int i = 0; i != tags; ++i)
+    str << WORD << name_tab->probe(i) << endl;
+}
+
+// Emint code for class_objTab
+//
+void CgenClassTable::code_obj_table()
+{
+  // emit class_objTab
+  str << CLASSOBJTAB << LABEL;
+  for (int i = 0; i != tags; ++i) {
+    Symbol name = name_tab->probe(i);
+    str << WORD; emit_protobj_ref(name, str); str << endl
+      << WORD; emit_init_ref(name, str); str << endl;
+  }
+}
+
 //
 // Emit code for proto objects
 //
@@ -666,7 +690,8 @@ void CgenClassTable::code_disp_table()
 }
 
 
-CgenClassTable::CgenClassTable(Classes classes, ostream& s) : nds(NULL) , str(s)
+CgenClassTable::CgenClassTable(Classes classes, ostream& s) : 
+  nds(NULL) , str(s), name_tab(new NameTabT())
 {
    objectclasstag = 0;
    ioclasstag     = 1;
@@ -676,6 +701,7 @@ CgenClassTable::CgenClassTable(Classes classes, ostream& s) : nds(NULL) , str(s)
    mainclasstag   = 5;
 
    enterscope();
+   name_tab->enterscope();
    if (cgen_debug) cout << "Building CgenClassTable" << endl;
    install_basic_classes();
    install_classes(classes);
@@ -861,6 +887,7 @@ void CgenClassTable::build_inheritance_tree()
       else {
         nd->set_tag(tags++);
       }
+      name_tab->addid(nd->tag(), name);
       if (cgen_debug) {
         cout << "Generate tag for: " << nd->tag() << ", " << name << endl;
       }
@@ -939,12 +966,10 @@ void CgenClassTable::code()
 //                   - class_nameTab
 //                   - dispatch tables
 //
-  // emit class_nameTab
-  str << CLASSNAMETAB << LABEL;
-  for (List<CgenNode> *l = nds; l; l = l->tl()) {
-    CgenNodeP nd = l->hd();
-    str << WORD << nd->name <<  endl;
-  }
+  // class_nameTab and class_objTab
+  code_name_table();
+  code_obj_table();
+
   // emit prototype objects for each class
   code_proto_obj();
   // dispatch_table
@@ -1026,8 +1051,8 @@ void CgenNode::code_attrs(ostream &str) const
         StringEntryP str_default = stringtable.lookup_string("");
         str << WORD; str_default->code_ref(str); str << endl;
       } else {
-        str << WORD; str << endl;
-        // TODO
+        // "void" for other classes
+        str << WORD << "0" << str << endl;
       }
     }
   }

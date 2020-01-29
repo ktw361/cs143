@@ -156,6 +156,12 @@ Mynotes:
     class_nameTab is <Tag(int), class name (String) > for runtime
     class_objTab is <Tag(int), prototype object...> for runtime 
 
+Dispatch table:
+  OffsetT stores mapping from method name to 'dispTab offset' O_f: <f, O_f>
+  TableT stores mapping from offset to mips code, <O_f, Code>
+  
+TODO: disp tab explain
+
 TODO: Int uses val=char*?
 
 Int:

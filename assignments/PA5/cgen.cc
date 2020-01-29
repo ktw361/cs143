@@ -22,6 +22,8 @@
 //
 //**************************************************************
 
+#include <deque>
+
 #include "cgen.h"
 #include "cgen_gc.h"
 
@@ -627,22 +629,58 @@ void CgenClassTable::code_constants()
   code_bools(boolclasstag);
 }
 
+//
+// Emit code for proto objects
+//
+void CgenClassTable::code_proto_obj()
+{
+  CgenNodeP tree_root = root();
+  std::deque<CgenNodeP> que;
+  que.push_back(tree_root);
+
+  while(!que.empty()) {
+    CgenNodeP nd = que.front();
+    que.pop_front();
+
+    str << WORD << "-1" << endl;
+    emit_protobj_ref(nd->name, str);
+    str << LABEL
+      << WORD << nd->tag() << endl
+      << WORD << nd->size() << endl
+      << WORD; emit_disptable_ref(nd->name, str); str << endl;
+    nd->code_attrs(str);
+
+    for (List<CgenNode> *l = nd->get_children(); l; l = l->tl())
+      que.push_back(l->hd());
+  }
+}
+
+//
+// Emit code for each class's dispatch table
+//
+void CgenClassTable::code_disp_table()
+{
+  // dfs perserve inheritance order
+  CgenNodeP tree_root = root();
+  tree_root->build_disptab(str);
+}
+
 
 CgenClassTable::CgenClassTable(Classes classes, ostream& s) : nds(NULL) , str(s)
 {
    objectclasstag = 0;
    ioclasstag     = 1;
-   mainclasstag   = 2;
-   intclasstag =    3 /* Change to your Int class tag here */;
-   boolclasstag =   4 /* Change to your Bool class tag here */;
-   stringclasstag = 5 /* Change to your String class tag here */;
+   intclasstag =    2 /* Change to your Int class tag here */;
+   boolclasstag =   3 /* Change to your Bool class tag here */;
+   stringclasstag = 4 /* Change to your String class tag here */;
+   mainclasstag   = 5;
 
    enterscope();
    if (cgen_debug) cout << "Building CgenClassTable" << endl;
    install_basic_classes();
    install_classes(classes);
    build_inheritance_tree();
-   /* set_classes_size(); */
+   set_classes_size();
 
    code();
    exitscope();
@@ -806,9 +844,8 @@ void CgenClassTable::build_inheritance_tree()
       CgenNodeP nd = l->hd();
       set_relations(nd);
 
+      // class name is coded into idtable in ast-lex.cc
       Symbol name = nd->get_name();
-      Symbol sym = idtable.lookup_string(name->get_string());
-      Symbol sym2 = stringtable.lookup_string(name->get_string());
       if (name == Object) 
         nd->set_tag(objectclasstag);
       else if (name == IO) 
@@ -824,9 +861,9 @@ void CgenClassTable::build_inheritance_tree()
       else {
         nd->set_tag(tags++);
       }
-      printf("%x %x %x, ", name, sym, sym2);
-      cout << tags ;
-      printf(" %s\n", sym->get_string());
+      if (cgen_debug) {
+        cout << "Generate tag for: " << nd->tag() << ", " << name << endl;
+      }
   }
 }
 
@@ -860,12 +897,29 @@ void CgenNode::set_parentnd(CgenNodeP p)
 //
 // Calcuate size field for each class
 //
-/* void CgenClassTable::set_classes_size() */ 
-/* { */
-/*   for(List<CgenNode> *l = nds; l; l = l->tl()) { */
-/*       set_relations(l->hd()); */
-/*   } */
-/* } */
+void CgenClassTable::set_classes_size() 
+{
+  CgenNodeP tree_root = root();
+  tree_root->set_size(OBJECT_SIZE);
+  std::deque<CgenNodeP> que;
+  for (List<CgenNode> *l = tree_root->get_children(); l; l = l->tl())
+    que.push_back(l->hd());
+
+  while(!que.empty()) {
+    CgenNodeP nd =  que.front();
+    que.pop_front();
+    int num_attrs = nd->num_attrs();
+    int parent_size = nd->get_parentnd()->size();
+    nd->set_size(parent_size + num_attrs);
+    for (List<CgenNode> *l = nd->get_children(); l; l = l->tl())
+      que.push_back(l->hd());
+
+    if (cgen_debug) {
+      cout << "Size of " << nd->name << " = " << nd->size() << endl;
+    }
+
+  }
+}
 
 
 
@@ -885,9 +939,16 @@ void CgenClassTable::code()
 //                   - class_nameTab
 //                   - dispatch tables
 //
-  // 1st pass: gather layout for each class
-
-  // 2nd pass: emit prototype objects for each class
+  // emit class_nameTab
+  str << CLASSNAMETAB << LABEL;
+  for (List<CgenNode> *l = nds; l; l = l->tl()) {
+    CgenNodeP nd = l->hd();
+    str << WORD << nd->name <<  endl;
+  }
+  // emit prototype objects for each class
+  code_proto_obj();
+  // dispatch_table
+  code_disp_table();
 
   if (cgen_debug) cout << "coding global text" << endl;
   code_global_text();
@@ -916,9 +977,150 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
    class__class((const class__class &) *nd),
    parentnd(NULL),
    children(NULL),
-   basic_status(bstatus)
+   basic_status(bstatus),
+   _tag(0),
+   _objsize(0),
+   _num_methods(0),
+   disp_offset(new OffsetT()),
+   disp_tab(new TableT())
+   // TODO add new fields
 { 
    stringtable.add_string(name->get_string());          // Add class name to string table
+}
+
+int CgenNode::num_attrs() const
+{
+  int n = 0;
+  Features feats = features;
+  for (int i = feats->first(); feats->more(i); i = feats->next(i))
+    if (dynamic_cast<attr_class*>(feats->nth(i))) n++;
+  return n;
+}
+
+void CgenNode::code_attrs(ostream &str) const
+{
+  if (name == Object) return;
+  if (name == Int || name == Bool) {
+    str << WORD << "0" << endl;
+    return;
+  }
+  if (name == Str) {
+    IntEntryP int_default = inttable.lookup_string("0");
+    str << WORD; int_default->code_ref(str); str << endl;
+    str << WORD << "0" << endl;
+    return;
+  }
+
+  get_parentnd()->code_attrs(str);
+  Features feats = features;
+  for (int i = feats->first(); feats->more(i); i = feats->next(i)) {
+    attr_class* attr = dynamic_cast<attr_class*>(feats->nth(i));
+    if (attr != NULL) {
+      Symbol type = attr->type_decl;
+      if (type == Int) {
+        IntEntryP int_default = inttable.lookup_string("0");
+        str << WORD; int_default->code_ref(str); str << endl;
+      } else if (type == Bool) {
+        falsebool.code_ref(str); str << endl;
+      } else if (type == Str) {
+        StringEntryP str_default = stringtable.lookup_string("");
+        str << WORD; str_default->code_ref(str); str << endl;
+      } else {
+        str << WORD; str << endl;
+        // TODO
+      }
+    }
+  }
+}
+
+void CgenNode::build_disptab(ostream &str)
+{
+  disp_offset->enterscope();
+  disp_tab->enterscope();
+  Features feats = features;
+
+  if (name == Object) {
+    for (int i = feats->first(); feats->more(i); i = feats->next(i)) {
+      method_class *method = dynamic_cast<method_class*>(feats->nth(i));
+      if (method != NULL) {
+        Symbol method_name = method->name;
+        DispTabEntryP entry = new DispTabEntry(name, method_name);
+          disp_offset->addid(method_name, new int(_num_methods));
+          disp_tab->addid(_num_methods, entry);
+          _num_methods++;
+      } // end if 
+    } // end for
+
+    code_disptab(str); // emit code
+
+    // dfs step
+    for (List<CgenNode> *l = children; l; l = l->tl())
+      l->hd()->build_disptab(str);
+    return;
+  }
+
+  OffsetT *parent_offset = parentnd->disp_offset;
+  TableT *parent_tab = parentnd->disp_tab;
+  _num_methods = parentnd->num_methods();
+
+  for (int i = feats->first(); feats->more(i); i = feats->next(i)) {
+    method_class *method = dynamic_cast<method_class*>(feats->nth(i));
+    if (method != NULL) {
+      Symbol method_name = method->name;
+      DispTabEntryP entry = new DispTabEntry(name, method_name);
+      int *offset = parentnd->probe_offset(method_name);
+      if (offset == NULL) {
+        disp_offset->addid(method_name, new int(_num_methods));
+        disp_tab->addid(_num_methods, entry);
+        _num_methods++;
+      } else {
+        // if found in ancestors
+        disp_tab->addid(*offset, entry);
+      }
+
+    } // end if 
+  } // end for
+
+  if (cgen_debug)
+    cout << "Class " << name << " methods: " << _num_methods << endl;
+  code_disptab(str); // emit code
+
+  // dfs step
+  for (List<CgenNode> *l = children; l; l = l->tl())
+    l->hd()->build_disptab(str);
+}
+
+void CgenNode::code_disptab(ostream &str) const
+{
+  emit_disptable_ref(name, str);
+  str << LABEL;
+  for (int i = 0; i != _num_methods; ++i) {
+    DispTabEntryP entry = disp_tab->probe(i);
+    if (entry != NULL)
+      str << WORD << entry->cls << METHOD_SEP << entry->method << endl;
+    else {
+      entry = parentnd->probe_entry(i);
+      str << WORD << entry->cls << METHOD_SEP << entry->method << endl;
+    }
+  }
+}
+
+int* CgenNode::probe_offset(Symbol id)
+{
+  int *ret = NULL;
+  ret = disp_offset->probe(id);
+  if (ret != NULL) return ret;
+  if (name == Object) return ret; // return NULL
+  return get_parentnd()->probe_offset(id);
+}
+
+DispTabEntryP CgenNode::probe_entry(int offset) 
+{
+  DispTabEntryP ret = NULL;
+  ret = disp_tab->probe(offset);
+  if (ret != NULL) return ret;
+  if (name == Object) return ret;
+  return get_parentnd()->probe_entry(offset);
 }
 
 
@@ -957,9 +1159,9 @@ void let_class::code(ostream &s) {
 }
 
 void plus_class::code(ostream &s) {
-  this->e1->code(s);
+  e1->code(s);
   emit_push(ACC, s);
-  this->e1->code(s);
+  e1->code(s);
   emit_load(T1, 0, SP, s);
   emit_add(ACC, T1, ACC, s);
   emit_pop(s);

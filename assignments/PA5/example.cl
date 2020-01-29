@@ -7,10 +7,20 @@ class Main {
   main():Int { 0 };
 };
 
-class C {
+class A {
   a : Int;
+  f() : Int { 1};
 };
 
-class Foo inherits C {
+class B inherits A {
   b : Int;
+  f() : Int { 2};
+};
+
+class C inherits A {
+  c : Int;
+  h() : Int { 3};
+};
+
+Class Foo inherits C {
 };

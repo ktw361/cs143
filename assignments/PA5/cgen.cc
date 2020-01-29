@@ -927,7 +927,7 @@ void CgenNode::set_parentnd(CgenNodeP p)
 void CgenClassTable::set_classes_size() 
 {
   CgenNodeP tree_root = root();
-  tree_root->set_size(OBJECT_SIZE);
+  tree_root->set_size(DEFAULT_OBJFIELDS);
   std::deque<CgenNodeP> que;
   for (List<CgenNode> *l = tree_root->get_children(); l; l = l->tl())
     que.push_back(l->hd());
@@ -1159,6 +1159,8 @@ DispTabEntryP CgenNode::probe_entry(int offset)
 //
 //*****************************************************************
 
+static int label_index = 0;
+
 void assign_class::code(ostream &s) {
 }
 
@@ -1185,11 +1187,16 @@ void let_class::code(ostream &s) {
 
 void plus_class::code(ostream &s) {
   e1->code(s);
+  emit_fetch_int(ACC, ACC, s); // push val field of e1
   emit_push(ACC, s);
-  e1->code(s);
-  emit_load(T1, 0, SP, s);
-  emit_add(ACC, T1, ACC, s);
+
+  e2->code(s);
+  s << JAL << Object << METHOD_SEP << COPY << endl; // copy() is method of tree_node
+  emit_fetch_int(T2, ACC, s); // load val field of e2 
+  emit_load(T1, 0, SP, s); // load val field of e1
   emit_pop(s);
+  emit_add(T1, T1, T2, s);
+  emit_store_int(T1, ACC, s);
 }
 
 void sub_class::code(ostream &s) {
@@ -1208,6 +1215,32 @@ void lt_class::code(ostream &s) {
 }
 
 void eq_class::code(ostream &s) {
+  e1->code(s);
+  emit_push(ACC, s);
+  e2->code(s);
+  emit_load(T2, 0, SP, s);
+  // beq acc, t2, _load_true_index
+  int true_index = label_index++;
+  emit_beq(ACC, T2, true_index, s);
+  // move t1, acc
+  // la a0 truebool.code_ref(s) 
+  // la a1 falsebool.code_ref(s)
+  // jal equality_test // if true, true const in a0, else false const in a0
+  // b _end_if_index
+  // _load_true_index:
+  //    la a0 truebool.code(s)
+  //    b _end_if_index
+  // _end_if_index:
+  emit_move(T1, ACC, s);
+  s << LA << ACC; truebool.code_ref(s); s << endl;
+  s << LA << A1; falsebool.code_ref(s); s << endl;
+  s << JAL << EQUALITY_TEST << endl;
+  int end_index = label_index++;
+  emit_branch(end_index, s);
+  emit_label_def(true_index, s);
+  s << LA << ACC; truebool.code_ref(s); s << endl;
+  emit_branch(end_index, s);
+  emit_label_def(end_index, s);
 }
 
 void leq_class::code(ostream &s) {

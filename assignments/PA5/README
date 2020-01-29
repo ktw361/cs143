@@ -160,7 +160,8 @@ Dispatch table:
   OffsetT stores mapping from method name to 'dispTab offset' O_f: <f, O_f>
   TableT stores mapping from offset to mips code, <O_f, Code>
   
-TODO: disp tab explain
+code:
+  equality_test() already done void check for us
 
 TODO: Int uses val=char*?
 

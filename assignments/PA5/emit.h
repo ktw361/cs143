@@ -36,6 +36,10 @@
 #define STRCONST_PREFIX      "str_const"
 #define BOOLCONST_PREFIX     "bool_const"
 
+// cgen string constants
+#define COPY                 "copy"
+#define EQUALITY_TEST           "equality_test"
+
 
 #define EMPTYSLOT            0
 #define LABEL                ":\n"

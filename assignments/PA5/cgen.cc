@@ -706,7 +706,7 @@ CgenClassTable::CgenClassTable(Classes classes, ostream& s) :
    install_basic_classes();
    install_classes(classes);
    build_inheritance_tree();
-   set_classes_size();
+   build_class_attrtab();
 
    code();
    exitscope();
@@ -920,32 +920,14 @@ void CgenNode::set_parentnd(CgenNodeP p)
 }
 
 //
-// CgenClassTable::set_classes_size
+// CgenClassTable::build_class_attrtab
 //
-// Calcuate size field for each class
+// Build attr table and calcuate size field for each class
 //
-void CgenClassTable::set_classes_size() 
+void CgenClassTable::build_class_attrtab() 
 {
   CgenNodeP tree_root = root();
-  tree_root->set_size(DEFAULT_OBJFIELDS);
-  std::deque<CgenNodeP> que;
-  for (List<CgenNode> *l = tree_root->get_children(); l; l = l->tl())
-    que.push_back(l->hd());
-
-  while(!que.empty()) {
-    CgenNodeP nd =  que.front();
-    que.pop_front();
-    int num_attrs = nd->num_attrs();
-    int parent_size = nd->get_parentnd()->size();
-    nd->set_size(parent_size + num_attrs);
-    for (List<CgenNode> *l = nd->get_children(); l; l = l->tl())
-      que.push_back(l->hd());
-
-    if (cgen_debug) {
-      cout << "Size of " << nd->name << " = " << nd->size() << endl;
-    }
-
-  }
+  tree_root->build_attrtab();
 }
 
 
@@ -1020,6 +1002,38 @@ int CgenNode::num_attrs() const
   for (int i = feats->first(); feats->more(i); i = feats->next(i))
     if (dynamic_cast<attr_class*>(feats->nth(i))) n++;
   return n;
+}
+
+void CgenNode::build_attrtab() 
+{
+  attr_tab->enterscope();
+  Features feats = features;
+
+  if (name == Object) {
+    _num_attrs = 0;
+    // dfs step
+    for (List<CgenNode> *l = children; l; l = l->tl())
+      l->hd()->build_attrtab();
+    return;
+  }
+
+  AttrTableT *parent_attrs = parentnd->attr_tab;
+  _num_attrs = parentnd->num_attrs();
+
+  for (int i = feats->first(); feats->more(i); i = feats->next(i)) {
+    attr_class *attr = dynamic_cast<attr_class*>(feats->nth(i));
+    if (attr != NULL) {
+      // semant guarantees that attr name will not conflict with parent's
+      // thus no need to do lookup/probe anymore
+      attr_tab->addid(attr->name, new int(_num_attrs));
+      _num_attrs++;
+    }
+  }
+  _objsize = DEFAULT_OBJFIELDS + _num_attrs;
+
+  // dfs step
+  for (List<CgenNode> *l = children; l; l = l->tl())
+    l->hd()->build_attrtab();
 }
 
 void CgenNode::code_attrs(ostream &str) const
@@ -1171,6 +1185,19 @@ void dispatch_class::code(ostream &s) {
 }
 
 void cond_class::code(ostream &s) {
+  pred->code(s);
+  emit_fetch_int(ACC, ACC, s);
+  int false_index = label_index++;
+  emit_beqz(ACC, false_index, s);
+  // (default) true branch
+  int end_index = label_index++;
+  then_exp->code(s);
+  emit_branch(end_index, s);
+  // false branch
+  emit_label_def(false_index, s);
+  else_exp->code(s);
+  // end_if:
+  emit_label_def(end_index, s);
 }
 
 void loop_class::code(ostream &s) {

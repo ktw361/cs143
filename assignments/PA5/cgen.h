@@ -59,7 +59,7 @@ private:
    void install_classes(Classes cs);
    void build_inheritance_tree();
    void set_relations(CgenNodeP nd);
-   void set_classes_size();
+   void build_class_attrtab();
 public:
    CgenClassTable(Classes, ostream& str);
    void code();
@@ -75,7 +75,11 @@ private:
                                               // `NotBasic' otherwise
    int _tag;
    int _objsize;
+   int _num_attrs;
    int _num_methods;
+
+   typedef SymbolTable<Symbol, int> AttrTableT;
+   AttrTableT *attr_tab;
 
    typedef SymbolTable<Symbol, int> OffsetT;
    typedef SymbolTable<int, DispTabEntry> TableT;
@@ -96,11 +100,11 @@ public:
    int basic() const { return (basic_status == Basic); }
 
    void set_tag(int tag) { _tag = tag; }
-   void set_size(int sz) { _objsize = sz; }
    int tag() const { return _tag; }
    int size() const { return _objsize; }
    int num_methods() const { return _num_methods; }
    int num_attrs() const;
+   void build_attrtab();
    void code_attrs(ostream&) const;
    void build_disptab(ostream&);
    void code_disptab(ostream&) const;

@@ -74,12 +74,12 @@ private:
    Basicness basic_status;                    // `Basic' if class is basic
                                               // `NotBasic' otherwise
    int _tag;
-   int _objsize;
    int _num_attrs;
    int _num_methods;
 
    typedef SymbolTable<Symbol, int> AttrTableT;
-   AttrTableT *attr_tab;
+   AttrTableT *attr_tab;    
+   // TODO // is also Environment during code()
 
    typedef SymbolTable<Symbol, int> OffsetT;
    typedef SymbolTable<int, DispTabEntry> TableT;
@@ -101,9 +101,9 @@ public:
 
    void set_tag(int tag) { _tag = tag; }
    int tag() const { return _tag; }
-   int size() const { return _objsize; }
+   int size() const { return DEFAULT_OBJFIELDS + _num_attrs; }
    int num_methods() const { return _num_methods; }
-   int num_attrs() const;
+   int num_attrs() const { return _num_attrs; }
    void build_attrtab();
    void code_attrs(ostream&) const;
    void build_disptab(ostream&);

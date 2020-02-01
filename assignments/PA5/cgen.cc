@@ -185,6 +185,20 @@ static void emit_load_bool(char *dest, const BoolConst& b, ostream& s)
   s << endl;
 }
 
+static void emit_load_truebool(char *dest, ostream& s)
+{
+  emit_partial_load_address(dest, s);
+  truebool.code_ref(s); 
+  s << endl;
+}
+
+static void emit_load_falsebool(char *dest, ostream& s)
+{
+  emit_partial_load_address(dest, s);
+  falsebool.code_ref(s); 
+  s << endl;
+}
+
 static void emit_load_string(char *dest, StringEntry *str, ostream& s)
 {
   emit_partial_load_address(dest,s);
@@ -689,6 +703,14 @@ void CgenClassTable::code_disp_table()
   tree_root->build_disptab(str);
 }
 
+// 
+//
+//
+void CgenClassTable::code_methods()
+{
+
+}
+
 
 CgenClassTable::CgenClassTable(Classes classes, ostream& s) : 
   nds(NULL) , str(s), name_tab(new NameTabT())
@@ -964,6 +986,8 @@ void CgenClassTable::code()
 //                   - object initializer
 //                   - the class methods
 //                   - etc...
+  /* code_init(); */
+  /* code_methods(); */
 
 }
 
@@ -986,22 +1010,13 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
    children(NULL),
    basic_status(bstatus),
    _tag(0),
-   _objsize(0),
    _num_methods(0),
+   attr_tab(new AttrTableT()),
    disp_offset(new OffsetT()),
    disp_tab(new TableT())
    // TODO add new fields
 { 
    stringtable.add_string(name->get_string());          // Add class name to string table
-}
-
-int CgenNode::num_attrs() const
-{
-  int n = 0;
-  Features feats = features;
-  for (int i = feats->first(); feats->more(i); i = feats->next(i))
-    if (dynamic_cast<attr_class*>(feats->nth(i))) n++;
-  return n;
 }
 
 void CgenNode::build_attrtab() 
@@ -1029,7 +1044,6 @@ void CgenNode::build_attrtab()
       _num_attrs++;
     }
   }
-  _objsize = DEFAULT_OBJFIELDS + _num_attrs;
 
   // dfs step
   for (List<CgenNode> *l = children; l; l = l->tl())
@@ -1176,9 +1190,28 @@ DispTabEntryP CgenNode::probe_entry(int offset)
 static int label_index = 0;
 
 void assign_class::code(ostream &s) {
+  // type check guarantees that 'self' will not be assigned
+  attr_tab->lookup(name);
+
 }
 
 void static_dispatch_class::code(ostream &s) {
+  emit_push(FP, s);
+  // push parameter in reverse order, use a stack
+  std::deque<int> param_stack;
+  for (int i = actual->first(); actual->more(i); i = actual->next(i)) {
+    param_stack.push_back(i);
+  }
+  while(!param_stack.empty()) {
+    int i = param_stack.pop_back();
+    actual->nth(i)->code(s);
+    emit_push(ACC, s);
+  } // TODO env?
+  expr->code(s);
+
+
+
+
 }
 
 void dispatch_class::code(ostream &s) {
@@ -1187,40 +1220,55 @@ void dispatch_class::code(ostream &s) {
 void cond_class::code(ostream &s) {
   pred->code(s);
   emit_fetch_int(ACC, ACC, s);
-  int false_index = label_index++;
-  emit_beqz(ACC, false_index, s);
-  // (default) true branch
-  int end_index = label_index++;
-  then_exp->code(s);
-  emit_branch(end_index, s);
-  // false branch
-  emit_label_def(false_index, s);
+  int false_label = label_index++;
+  emit_beqz(ACC, false_label, s);
+  then_exp->code(s);                  // (default) true branch
+  int end_label = label_index++; 
+  emit_branch(end_label, s);
+  emit_label_def(false_label, s);     // false branch
   else_exp->code(s);
-  // end_if:
-  emit_label_def(end_index, s);
+  emit_label_def(end_label, s);       // end_if:
 }
 
 void loop_class::code(ostream &s) {
+  int pred_label = label_index++;
+  emit_label_def(pred_label, s);
+  pred->code(s);
+  emit_fetch_int(ACC, ACC, s);
+  int end_label = label_index++;
+  emit_beqz(ACC, end_label, s);
+  body->code(s);
+  emit_branch(pred_label, s);
+  emit_label_def(end_label, s); // _end_loop:
+  emit_load_imm(ACC, 0, s);
 }
 
 void typcase_class::code(ostream &s) {
 }
 
 void block_class::code(ostream &s) {
+  for (int i = body->first(); body->more(i); i = body->next(i))
+    body->nth(i)->code(s);
 }
 
 void let_class::code(ostream &s) {
+  init->code(s);
+  // get type(class) size
+  int size = type_node->size();
+  emit_addiu(SP, SP, WORD_SIZE * size, s);
+
+
 }
 
 void plus_class::code(ostream &s) {
   e1->code(s);
-  emit_fetch_int(ACC, ACC, s); // push val field of e1
+  emit_fetch_int(ACC, ACC, s);  // push val field of e1
   emit_push(ACC, s);
-
   e2->code(s);
-  s << JAL << Object << METHOD_SEP << COPY << endl; // copy() is method of tree_node
-  emit_fetch_int(T2, ACC, s); // load val field of e2 
-  emit_load(T1, 0, SP, s); // load val field of e1
+  s << JAL << Object << METHOD_SEP 
+    << COPY << endl;            // copy() is method of tree_node
+  emit_fetch_int(T2, ACC, s);   // load val field of e2 
+  emit_load(T1, 0, SP, s);      // load val field of e1
   emit_pop(s);
   emit_add(T1, T1, T2, s);
   emit_store_int(T1, ACC, s);
@@ -1245,29 +1293,20 @@ void eq_class::code(ostream &s) {
   e1->code(s);
   emit_push(ACC, s);
   e2->code(s);
-  emit_load(T2, 0, SP, s);
-  // beq acc, t2, _load_true_index
-  int true_index = label_index++;
-  emit_beq(ACC, T2, true_index, s);
-  // move t1, acc
-  // la a0 truebool.code_ref(s) 
-  // la a1 falsebool.code_ref(s)
-  // jal equality_test // if true, true const in a0, else false const in a0
-  // b _end_if_index
-  // _load_true_index:
-  //    la a0 truebool.code(s)
-  //    b _end_if_index
-  // _end_if_index:
+  emit_load(T2, 0, SP, s); // beq acc, t2, _load_true_label
+  int true_label = label_index++;
+  emit_beq(ACC, T2, true_label, s);
   emit_move(T1, ACC, s);
-  s << LA << ACC; truebool.code_ref(s); s << endl;
-  s << LA << A1; falsebool.code_ref(s); s << endl;
-  s << JAL << EQUALITY_TEST << endl;
-  int end_index = label_index++;
-  emit_branch(end_index, s);
-  emit_label_def(true_index, s);
-  s << LA << ACC; truebool.code_ref(s); s << endl;
-  emit_branch(end_index, s);
-  emit_label_def(end_index, s);
+  emit_load_truebool(ACC, s);
+  emit_load_falsebool(A1, s);
+  s << JAL << EQUALITY_TEST << endl;  // if true, true const in a0, 
+                                      // else false const in a0
+  int end_label = label_index++;
+  emit_branch(end_label, s);
+  emit_label_def(true_label, s);
+  emit_load_truebool(ACC, s);
+  emit_branch(end_label, s);
+  emit_label_def(end_label, s);
 }
 
 void leq_class::code(ostream &s) {
@@ -1298,6 +1337,16 @@ void new__class::code(ostream &s) {
 }
 
 void isvoid_class::code(ostream &s) {
+  e1->code(s);
+  emit_fetch_int(ACC, ACC, s);
+  int false_label = label_index++;
+  emit_beqz(ACC, false_label, s);
+  emit_load_truebool(ACC, s);
+  int end_label = label_index++;
+  emit_branch(end_label, s);
+  emit_label_def(false_label, s);
+  emit_load_falsebool(ACC, s);
+  emit_label_def(end_label, s);
 }
 
 void no_expr_class::code(ostream &s) {

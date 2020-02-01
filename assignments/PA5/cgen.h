@@ -49,7 +49,7 @@ private:
    void code_name_table();
    void code_obj_table();
    void code_proto_obj();
-   void code_disp_table();
+   void code_disptabs();
 
 // The following creates an inheritance graph from
 // a list of classes.  The graph is implemented as
@@ -81,14 +81,12 @@ private:
 
    typedef SymbolTable<Symbol, int> AttrTableT;
    AttrTableT *attr_tab;    
-   // TODO // is also Environment during code()
 
    typedef SymbolTable<Symbol, int> OffsetT;
    typedef SymbolTable<int, DispTabEntry> TableT;
    OffsetT *disp_offset;
    TableT *disp_tab;
-   int* probe_offset(Symbol m);
-   DispTabEntryP probe_entry(int offset);
+   DispTabEntryP probe_entry(int offset) const;
 
 public:
    CgenNode(Class_ c,
@@ -110,6 +108,9 @@ public:
    void code_attrs(ostream&) const;
    void build_disptab(ostream&);
    void code_disptab(ostream&) const;
+
+   int* get_method_offset(Symbol) const;
+   int get_attr_offset(Symbol) const;
 };
 
 // dispatch info

@@ -31,6 +31,7 @@ extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
 
 // TODO check necessary
+static CgenClassTableP cgen_classtable;
 static CgenNodeP cur_cgnode;
 
 //
@@ -272,7 +273,7 @@ static void emit_method_ref(Symbol classname, Symbol methodname, ostream& s)
 
 static void emit_jal_method(Symbol classname, Symbol methodname, ostream& s)
 {
-  s << JAL << classname << METHOD_SEP << methodname;
+  s << JAL << classname << METHOD_SEP << methodname << endl;
 }
 
 static void emit_label_def(int l, ostream &s)
@@ -704,7 +705,7 @@ void CgenClassTable::code_proto_obj()
 //
 // Emit code for each class's dispatch table
 //
-void CgenClassTable::code_disp_table()
+void CgenClassTable::code_disptabs()
 {
   // dfs perserve inheritance order
   CgenNodeP tree_root = root();
@@ -986,7 +987,7 @@ void CgenClassTable::code()
   // emit prototype objects for each class
   code_proto_obj();
   // dispatch_table
-  code_disp_table();
+  code_disptabs();
 
   if (cgen_debug) cout << "coding global text" << endl;
   code_global_text();
@@ -1028,8 +1029,7 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
    stringtable.add_string(name->get_string());          // Add class name to string table
 }
 
-void CgenNode::build_attrtab() 
-{
+void CgenNode::build_attrtab() {
   attr_tab->enterscope();
   Features feats = features;
 
@@ -1059,8 +1059,7 @@ void CgenNode::build_attrtab()
     l->hd()->build_attrtab();
 }
 
-void CgenNode::code_attrs(ostream &str) const
-{
+void CgenNode::code_attrs(ostream &str) const {
   if (name == Object) return;
   if (name == Int || name == Bool) {
     str << WORD << "0" << endl;
@@ -1095,8 +1094,7 @@ void CgenNode::code_attrs(ostream &str) const
   }
 }
 
-void CgenNode::build_disptab(ostream &str)
-{
+void CgenNode::build_disptab(ostream &str) {
   disp_offset->enterscope();
   disp_tab->enterscope();
   Features feats = features;
@@ -1130,7 +1128,7 @@ void CgenNode::build_disptab(ostream &str)
     if (method != NULL) {
       Symbol method_name = method->name;
       DispTabEntryP entry = new DispTabEntry(name, method_name);
-      int *offset = parentnd->probe_offset(method_name);
+      int *offset = parentnd->get_method_offset(method_name);
       if (offset == NULL) {
         disp_offset->addid(method_name, new int(_num_methods));
         disp_tab->addid(_num_methods, entry);
@@ -1152,8 +1150,7 @@ void CgenNode::build_disptab(ostream &str)
     l->hd()->build_disptab(str);
 }
 
-void CgenNode::code_disptab(ostream &str) const
-{
+void CgenNode::code_disptab(ostream &str) const {
   emit_disptable_ref(name, str);
   str << LABEL;
   for (int i = 0; i != _num_methods; ++i) {
@@ -1167,17 +1164,19 @@ void CgenNode::code_disptab(ostream &str) const
   }
 }
 
-int* CgenNode::probe_offset(Symbol id)
-{
+int* CgenNode::get_method_offset(Symbol id) const {
   int *ret = NULL;
   ret = disp_offset->probe(id);
   if (ret != NULL) return ret;
   if (name == Object) return ret; // return NULL
-  return get_parentnd()->probe_offset(id);
+  return get_parentnd()->get_method_offset(id);
 }
 
-DispTabEntryP CgenNode::probe_entry(int offset) 
-{
+int CgenNode::get_attr_offset(Symbol sym) const {
+  return *attr_tab->lookup(sym);
+}
+
+DispTabEntryP CgenNode::probe_entry(int offset) const {
   DispTabEntryP ret = NULL;
   ret = disp_tab->probe(offset);
   if (ret != NULL) return ret;
@@ -1201,64 +1200,80 @@ static int label_index = 0;
 static EnvType *cur_env;
 static int fp_offset = 0; // in bytes
 
+static void code_var_ref(Symbol name, ostream& s) {
+  if (name == self) {
+    emit_load(ACC, WORD_SIZE, FP, s); // load self object 'so'
+    return;
+  }
+  // args and dynamic vars(let & case)
+  int *offset = cur_env->lookup(name);
+  if (offset != NULL) {
+    emit_load(ACC, WORD_SIZE * (*offset), FP, s);
+    return;
+  }
+  // resort to attribute table
+  *offset = cur_cgnode->get_attr_offset(name);
+  emit_load(ACC, WORD_SIZE, FP, s); // load self object 'so'
+  emit_load(ACC, WORD_SIZE * (*offset), FP, s);
+}
+
+static void code_dispatch(
+    Expression expr, 
+    Symbol type_name, 
+    Symbol name, 
+    Expressions actual, 
+    ostream& s) 
+{
+  emit_push(FP, s);
+  for (int i = actual->first(); actual->more(i); i = actual->next(i)) {
+    actual->nth(i)->code(s);
+    emit_push(ACC, s);
+  }
+  expr->code(s);
+  int nonzero_label = label_index++;
+  emit_bne(ACC, ZERO, nonzero_label, s);
+  emit_load_string(
+      ACC, 
+      stringtable.lookup_string(
+        cur_cgnode->get_filename()->get_string()), 
+      s);
+  emit_load_imm(T1, cur_cgnode->get_line_number(), s); // TODO check
+  emit_jal(DISPATCH_ABORT, s);
+  emit_label_def(nonzero_label, s);
+
+  CgenNodeP cgnode;
+  if (name != NULL)
+    cgnode = cgen_classtable->lookup(name); // static dispatch
+  else
+    cgnode = cur_cgnode;                    // default dispatch
+
+  int *offset = cgnode->get_method_offset(name);
+  if (offset == NULL) {
+    cerr << "Fatal error: " << name << " undefined."
+      << "This should not happen as typechecker already check method "
+      << "is defined." << endl;
+    exit(0);
+  }
+  emit_load(ACC, WORD_SIZE, FP, s);           // load 'so'
+  emit_load(ACC, DISPTABLE_OFFSET, ACC, s);   // load dispTab
+  emit_load(ACC, WORD_SIZE * (*offset), ACC, s); // load method
+  emit_jalr(ACC, s);
+}
+
 void assign_class::code(ostream &s) {
   // type check guarantees that 'self' will not be assigned
-  /* attr_tab->lookup(name); */
-
+  expr->code(s);
+  emit_move(T1, ACC, s);
+  code_var_ref(name, s);
+  emit_move(ACC, T1, s);
 }
 
 void static_dispatch_class::code(ostream &s) {
-  emit_push(FP, s);
-  // push parameter in reverse order, use a stack
-  std::deque<int> param_stack;
-  for (int i = actual->first(); actual->more(i); i = actual->next(i)) {
-    param_stack.push_back(i);
-  }
-  while(!param_stack.empty()) {
-    int i = param_stack.back();
-    param_stack.pop_back();
-    actual->nth(i)->code(s);
-    emit_push(ACC, s);
-  }
-  expr->code(s);
-  int nonzero_label = label_index++;
-  emit_bne(ACC, ZERO, nonzero_label, s);
-  emit_load_string(
-      ACC, 
-      stringtable.lookup_string(
-        cur_cgnode->get_filename()->get_string()), 
-      s);
-  emit_load_imm(T1, cur_cgnode->get_line_number(), s); // TODO check
-  emit_jal(DISPATCH_ABORT, s);
-  emit_label_def(nonzero_label, s);
-  emit_jal_method(cur_cgnode->get_name(), name, s);
+  code_dispatch(expr, type_name, name, actual, s);
 }
 
 void dispatch_class::code(ostream &s) {
-  emit_push(FP, s);
-  // push parameter in reverse order, use a stack
-  std::deque<int> param_stack;
-  for (int i = actual->first(); actual->more(i); i = actual->next(i)) {
-    param_stack.push_back(i);
-  }
-  while(!param_stack.empty()) {
-    int i = param_stack.back();
-    param_stack.pop_back();
-    actual->nth(i)->code(s);
-    emit_push(ACC, s);
-  }
-  expr->code(s);
-  int nonzero_label = label_index++;
-  emit_bne(ACC, ZERO, nonzero_label, s);
-  emit_load_string(
-      ACC, 
-      stringtable.lookup_string(
-        cur_cgnode->get_filename()->get_string()), 
-      s);
-  emit_load_imm(T1, cur_cgnode->get_line_number(), s); // TODO check
-  emit_jal(DISPATCH_ABORT, s);
-  emit_label_def(nonzero_label, s);
-  emit_jal_method(cur_cgnode->get_name(), name, s);
+  code_dispatch(expr, type_name, NULL, actual, s);
 }
 
 void cond_class::code(ostream &s) {
@@ -1296,7 +1311,6 @@ void block_class::code(ostream &s) {
 }
 
 void let_class::code(ostream &s) {
-  /* cur_env = TODO */ 
   // cur_env is set in cgen for method definition
   cur_env->enterscope();
   cur_env->addid(identifier, new int(fp_offset));
@@ -1312,10 +1326,9 @@ void plus_class::code(ostream &s) {
   emit_fetch_int(ACC, ACC, s);  // push val field of e1
   emit_push(ACC, s);
   e2->code(s);
-  s << JAL << Object << METHOD_SEP 
-    << COPY << endl;            // copy() is method of tree_node
-  emit_fetch_int(T2, ACC, s);   // load val field of e2 
-  emit_load(T1, 0, SP, s);      // load val field of e1
+  emit_jal_method(Object, ::copy, s); // copy() is method of tree_node
+  emit_fetch_int(T2, ACC, s);       // load val field of e2 
+  emit_load(T1, 0, SP, s);          // load val field of e1
   emit_pop(s);
   emit_add(T1, T1, T2, s);
   emit_store_int(T1, ACC, s);
@@ -1346,7 +1359,7 @@ void eq_class::code(ostream &s) {
   emit_move(T1, ACC, s);
   emit_load_truebool(ACC, s);
   emit_load_falsebool(A1, s);
-  s << JAL << EQUALITY_TEST << endl;  // if true, true const in a0, 
+  emit_jal(EQUALITY_TEST, s);         // if true, true const in a0, 
                                       // else false const in a0
   int end_label = label_index++;
   emit_branch(end_label, s);
@@ -1400,6 +1413,7 @@ void no_expr_class::code(ostream &s) {
 }
 
 void object_class::code(ostream &s) {
+  code_var_ref(name, s);
 }
 
 

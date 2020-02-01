@@ -37,7 +37,6 @@
 #define BOOLCONST_PREFIX     "bool_const"
 
 // cgen string constants
-#define COPY                 "copy"
 #define EQUALITY_TEST        "equality_test"
 #define DISPATCH_ABORT       "_dispatch_abort"
 

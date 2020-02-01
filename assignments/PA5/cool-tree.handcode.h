@@ -76,6 +76,10 @@ virtual void dump_with_types(ostream&,int) = 0;
 void dump_with_types(ostream&,int);    
 
 
+#define method_EXTRAS                             \
+void code(ostream&);
+
+
 #define Formal_EXTRAS                              \
 virtual void dump_with_types(ostream&,int) = 0;
 

@@ -33,6 +33,8 @@ extern int cgen_debug;
 // TODO check necessary
 static CgenClassTableP cgen_classtable;
 static CgenNodeP cur_cgnode;
+static EnvType *cur_env;
+static int fp_offset = 0; // in bytes
 
 //
 // Three symbols from the semantic analyzer (semant.cc) are used.
@@ -1139,7 +1141,6 @@ void CgenNode::build_disptab(ostream &str) {
         // if found in ancestors
         disp_tab->addid(*offset, entry);
       }
-
     } // end if 
   } // end for
 
@@ -1162,8 +1163,12 @@ void CgenNode::code_disptab(ostream &str) const {
   }
 }
 
-void CgenNode::code_method_def(ostream& str) {
-
+// Emit method definition for all methods
+void CgenNode::code_method_def(ostream& s) {
+  for (int i = features->first(); features->more(i); i = features->next(i)) {
+    method_class *method = dynamic_cast<method_class*>(features->nth(i));
+    if (method != NULL) method->code(s);
+  }
 }
 
 // Map method name to offset O_f in dispatch table
@@ -1187,6 +1192,45 @@ DispTabEntryP CgenNode::probe_entry(int offset) const {
   return get_parentnd()->probe_entry(offset);
 }
 
+//******************************************************
+// cgen function for Method definition 
+//******************************************************
+void method_class::code(ostream& s) {
+  /**********************************/
+  /************ prologue ************/
+  /**********************************/
+  emit_push(ACC, s); // push 'so'
+  emit_push(RA, s);
+  fp_offset = WORD_SIZE * (formals->len() + 2); // 'so' and $ra
+  // calculate formal offset
+  for (int i = formals->first(); formals->more(i); i = formals->next(i)) {
+    formal_class *arg = dynamic_cast<formal_class*>(formals->nth(i));
+    Symbol name = arg->name;
+    cur_env->addid(name, new int(fp_offset));
+    fp_offset -= WORD_SIZE;
+  }
+  // calculate upper bound of sequential local variables
+  /* int num_locals = expr->num_locals(); */
+  int num_locals = 100;
+  emit_addiu(SP, SP, - WORD_SIZE * num_locals, s);
+  /**********************************/
+  /********* prologue end ***********/
+  /**********************************/
+  expr->code(s);
+  /**********************************/
+  /************ epilogue ************/
+  /**********************************/
+  emit_load(RA, 0, FP, s);
+  emit_load(FP, WORD_SIZE * (formals->len() + 2), FP, s);
+  //        --- num_locals | 
+  // <-- low ---              
+  emit_addiu(SP, SP, WORD_SIZE * (num_locals + 3 + formals->len()), s);
+  emit_jalr(RA, s);
+  /**********************************/
+  /********** epilogue end **********/
+  /**********************************/
+}
+
 
 //******************************************************************
 //
@@ -1200,15 +1244,12 @@ DispTabEntryP CgenNode::probe_entry(int offset) const {
 
 static int label_index = 0;
 
-static EnvType *cur_env;
-static int fp_offset = 0; // in bytes
-
 static void code_var_ref(Symbol name, ostream& s) {
   if (name == self) {
     emit_load(ACC, WORD_SIZE, FP, s); // load self object 'so'
     return;
   }
-  // args and dynamic vars(let & case)
+  // args and local vars
   int *offset = cur_env->lookup(name);
   if (offset != NULL) {
     emit_load(ACC, WORD_SIZE * (*offset), FP, s);

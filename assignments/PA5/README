@@ -165,6 +165,7 @@ TODO? Attribute table:
   is also Environment, with outer most scope as attribute,
   and function argument and let/case add variable declaration to inner scope.
 
+The configuration of $fp resembles $rbp in gcc calling convention.
   
 code:
   equality_test() already done void check for us

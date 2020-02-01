@@ -38,7 +38,8 @@
 
 // cgen string constants
 #define COPY                 "copy"
-#define EQUALITY_TEST           "equality_test"
+#define EQUALITY_TEST        "equality_test"
+#define DISPATCH_ABORT       "_dispatch_abort"
 
 
 #define EMPTYSLOT            0

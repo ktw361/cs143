@@ -30,6 +30,9 @@
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
 
+// TODO check necessary
+static CgenNodeP cur_cgnode;
+
 //
 // Three symbols from the semantic analyzer (semant.cc) are used.
 // If e : No_type, then no code is generated for e.
@@ -266,6 +269,11 @@ static void emit_protobj_ref(Symbol sym, ostream& s)
 
 static void emit_method_ref(Symbol classname, Symbol methodname, ostream& s)
 { s << classname << METHOD_SEP << methodname; }
+
+static void emit_jal_method(Symbol classname, Symbol methodname, ostream& s)
+{
+  s << JAL << classname << METHOD_SEP << methodname;
+}
 
 static void emit_label_def(int l, ostream &s)
 {
@@ -1190,6 +1198,9 @@ DispTabEntryP CgenNode::probe_entry(int offset)
 
 static int label_index = 0;
 
+static EnvType *cur_env;
+static int fp_offset = 0; // in bytes
+
 void assign_class::code(ostream &s) {
   // type check guarantees that 'self' will not be assigned
   /* attr_tab->lookup(name); */
@@ -1208,15 +1219,46 @@ void static_dispatch_class::code(ostream &s) {
     param_stack.pop_back();
     actual->nth(i)->code(s);
     emit_push(ACC, s);
-  } // TODO env?
+  }
   expr->code(s);
-
-
-
-
+  int nonzero_label = label_index++;
+  emit_bne(ACC, ZERO, nonzero_label, s);
+  emit_load_string(
+      ACC, 
+      stringtable.lookup_string(
+        cur_cgnode->get_filename()->get_string()), 
+      s);
+  emit_load_imm(T1, cur_cgnode->get_line_number(), s); // TODO check
+  emit_jal(DISPATCH_ABORT, s);
+  emit_label_def(nonzero_label, s);
+  emit_jal_method(cur_cgnode->get_name(), name, s);
 }
 
 void dispatch_class::code(ostream &s) {
+  emit_push(FP, s);
+  // push parameter in reverse order, use a stack
+  std::deque<int> param_stack;
+  for (int i = actual->first(); actual->more(i); i = actual->next(i)) {
+    param_stack.push_back(i);
+  }
+  while(!param_stack.empty()) {
+    int i = param_stack.back();
+    param_stack.pop_back();
+    actual->nth(i)->code(s);
+    emit_push(ACC, s);
+  }
+  expr->code(s);
+  int nonzero_label = label_index++;
+  emit_bne(ACC, ZERO, nonzero_label, s);
+  emit_load_string(
+      ACC, 
+      stringtable.lookup_string(
+        cur_cgnode->get_filename()->get_string()), 
+      s);
+  emit_load_imm(T1, cur_cgnode->get_line_number(), s); // TODO check
+  emit_jal(DISPATCH_ABORT, s);
+  emit_label_def(nonzero_label, s);
+  emit_jal_method(cur_cgnode->get_name(), name, s);
 }
 
 void cond_class::code(ostream &s) {
@@ -1254,12 +1296,15 @@ void block_class::code(ostream &s) {
 }
 
 void let_class::code(ostream &s) {
+  /* cur_env = TODO */ 
+  // cur_env is set in cgen for method definition
+  cur_env->enterscope();
+  cur_env->addid(identifier, new int(fp_offset));
   init->code(s);
-  // get type(class) size
-  /* int size = type_node->size(); */
-  /* emit_addiu(SP, SP, WORD_SIZE * size, s); */
-
-
+  emit_store(ACC, fp_offset, FP, s);
+  fp_offset -= WORD_SIZE;
+  body->code(s);
+  cur_env->exitscope();
 }
 
 void plus_class::code(ostream &s) {

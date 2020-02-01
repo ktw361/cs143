@@ -19,6 +19,8 @@ typedef CgenNode *CgenNodeP;
 struct DispTabEntry;
 typedef DispTabEntry *DispTabEntryP;
 
+typedef SymbolTable<Symbol, int> EnvType;
+
 class CgenClassTable : public SymbolTable<Symbol,CgenNode> {
 private:
    List<CgenNode> *nds;
@@ -114,7 +116,9 @@ public:
 struct DispTabEntry {
   Symbol cls;
   Symbol method;
-  DispTabEntry(Symbol c, Symbol m) : cls(c), method(m) {}
+  EnvType *env;
+  DispTabEntry(Symbol c, Symbol m) : 
+    cls(c), method(m), env(new EnvType()) {}
 };
 
 class BoolConst 

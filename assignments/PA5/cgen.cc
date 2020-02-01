@@ -706,10 +706,11 @@ void CgenClassTable::code_disp_table()
 // 
 //
 //
-void CgenClassTable::code_methods()
-{
+/* void CgenClassTable::code_methods() */
+/* { */
+// TODO
 
-}
+/* } */
 
 
 CgenClassTable::CgenClassTable(Classes classes, ostream& s) : 
@@ -1098,9 +1099,9 @@ void CgenNode::build_disptab(ostream &str)
       if (method != NULL) {
         Symbol method_name = method->name;
         DispTabEntryP entry = new DispTabEntry(name, method_name);
-          disp_offset->addid(method_name, new int(_num_methods));
-          disp_tab->addid(_num_methods, entry);
-          _num_methods++;
+        disp_offset->addid(method_name, new int(_num_methods));
+        disp_tab->addid(_num_methods, entry);
+        _num_methods++;
       } // end if 
     } // end for
 
@@ -1191,7 +1192,7 @@ static int label_index = 0;
 
 void assign_class::code(ostream &s) {
   // type check guarantees that 'self' will not be assigned
-  attr_tab->lookup(name);
+  /* attr_tab->lookup(name); */
 
 }
 
@@ -1203,7 +1204,8 @@ void static_dispatch_class::code(ostream &s) {
     param_stack.push_back(i);
   }
   while(!param_stack.empty()) {
-    int i = param_stack.pop_back();
+    int i = param_stack.back();
+    param_stack.pop_back();
     actual->nth(i)->code(s);
     emit_push(ACC, s);
   } // TODO env?
@@ -1254,8 +1256,8 @@ void block_class::code(ostream &s) {
 void let_class::code(ostream &s) {
   init->code(s);
   // get type(class) size
-  int size = type_node->size();
-  emit_addiu(SP, SP, WORD_SIZE * size, s);
+  /* int size = type_node->size(); */
+  /* emit_addiu(SP, SP, WORD_SIZE * size, s); */
 
 
 }

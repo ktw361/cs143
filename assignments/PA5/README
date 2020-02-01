@@ -161,6 +161,7 @@ Dispatch table:
   TableT stores mapping from offset to mips code, <O_f, Code>
 
 TODO (PA4, semant attr!!!)
+TODO (PA4, main no arg)
 TODO? Attribute table:
   is also Environment, with outer most scope as attribute,
   and function argument and let/case add variable declaration to inner scope.

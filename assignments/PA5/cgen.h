@@ -51,6 +51,7 @@ private:
    void code_proto_obj();
    void code_disptabs();
 
+   void code_inits();
    void code_method_defs();
 
 // The following creates an inheritance graph from
@@ -110,6 +111,7 @@ public:
    void code_attrs(ostream&) const;
    void build_disptab(ostream&);
    void code_disptab(ostream&) const;
+   void code_init(ostream&) const;
    void code_method_def(ostream&);
 
    int* get_method_offset(Symbol) const;

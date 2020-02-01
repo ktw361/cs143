@@ -27,6 +27,9 @@
 #include "cgen.h"
 #include "cgen_gc.h"
 
+#define LOOP_LIST_NODE(i, list) \
+  for (int i = (list)->first(); (list)->more(i); i = (list)->next(i))
+
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
 
@@ -264,6 +267,9 @@ static void emit_disptable_ref(Symbol sym, ostream& s)
 static void emit_init_ref(Symbol sym, ostream& s)
 { s << sym << CLASSINIT_SUFFIX; }
 
+static void emit_jal_init_ref(Symbol sym, ostream& s)
+{ s << JAL << "\t" << sym << CLASSINIT_SUFFIX; }
+
 static void emit_label_ref(int l, ostream &s)
 { s << "label" << l; }
 
@@ -274,9 +280,7 @@ static void emit_method_ref(Symbol classname, Symbol methodname, ostream& s)
 { s << classname << METHOD_SEP << methodname; }
 
 static void emit_jal_method(Symbol classname, Symbol methodname, ostream& s)
-{
-  s << JAL << classname << METHOD_SEP << methodname << endl;
-}
+{ s << JAL << "\t" << classname << METHOD_SEP << methodname << endl; }
 
 static void emit_label_def(int l, ostream &s)
 {
@@ -692,11 +696,11 @@ void CgenClassTable::code_proto_obj()
     que.pop_front();
 
     str << WORD << "-1" << endl;
-    emit_protobj_ref(nd->name, str);
+    emit_protobj_ref(nd->get_name(), str);
     str << LABEL
       << WORD << nd->tag() << endl
       << WORD << nd->size() << endl
-      << WORD; emit_disptable_ref(nd->name, str); str << endl;
+      << WORD; emit_disptable_ref(nd->get_name(), str); str << endl;
     nd->code_attrs(str);
 
     for (List<CgenNode> *l = nd->get_children(); l; l = l->tl())
@@ -711,6 +715,14 @@ void CgenClassTable::code_disptabs() {
   // dfs perserve inheritance order
   CgenNodeP tree_root = root();
   tree_root->build_disptab(str);
+}
+
+//
+// Emit code for each class's initialization label definition
+//
+void CgenClassTable::code_inits() {
+  for(List<CgenNode> *l = nds; l; l = l->tl())
+    l->hd()->code_init(str);
 }
 
 // 
@@ -888,7 +900,7 @@ void CgenClassTable::install_class(CgenNodeP nd)
 
 void CgenClassTable::install_classes(Classes cs)
 {
-  for(int i = cs->first(); cs->more(i); i = cs->next(i))
+  LOOP_LIST_NODE(i, cs)
     install_class(new CgenNode(cs->nth(i),NotBasic,this));
 }
 
@@ -996,7 +1008,7 @@ void CgenClassTable::code()
 //                   - object initializer
 //                   - the class methods
 //                   - etc...
-  /* code_init(); */
+  code_inits();
   code_method_defs();
 
 }
@@ -1045,7 +1057,8 @@ void CgenNode::build_attrtab() {
   AttrTableT *parent_attrs = parentnd->attr_tab;
   _num_attrs = parentnd->num_attrs();
 
-  for (int i = feats->first(); feats->more(i); i = feats->next(i)) {
+  LOOP_LIST_NODE(i, feats)
+  {
     attr_class *attr = dynamic_cast<attr_class*>(feats->nth(i));
     if (attr != NULL) {
       // semant guarantees that attr name will not conflict with parent's
@@ -1076,7 +1089,8 @@ void CgenNode::code_attrs(ostream &str) const {
 
   get_parentnd()->code_attrs(str);
   Features feats = features;
-  for (int i = feats->first(); feats->more(i); i = feats->next(i)) {
+  LOOP_LIST_NODE(i, feats)
+  {
     attr_class* attr = dynamic_cast<attr_class*>(feats->nth(i));
     if (attr != NULL) {
       Symbol type = attr->type_decl;
@@ -1104,7 +1118,8 @@ void CgenNode::build_disptab(ostream &str) {
   Features feats = features;
 
   if (name == Object) {
-    for (int i = feats->first(); feats->more(i); i = feats->next(i)) {
+    LOOP_LIST_NODE(i, feats)
+    {
       method_class *method = dynamic_cast<method_class*>(feats->nth(i));
       if (method != NULL) {
         Symbol method_name = method->name;
@@ -1127,7 +1142,8 @@ void CgenNode::build_disptab(ostream &str) {
   TableT *parent_tab = parentnd->disp_tab;
   _num_methods = parentnd->num_methods();
 
-  for (int i = feats->first(); feats->more(i); i = feats->next(i)) {
+  LOOP_LIST_NODE(i, feats)
+  {
     method_class *method = dynamic_cast<method_class*>(feats->nth(i));
     if (method != NULL) {
       Symbol method_name = method->name;
@@ -1163,9 +1179,19 @@ void CgenNode::code_disptab(ostream &str) const {
   }
 }
 
+// Emit *_init label definition
+void CgenNode::code_init(ostream& s) const {
+  emit_init_ref(name, s);
+  s << LABEL;
+  /* init->code(s); */
+  // TODO
+}
+
 // Emit method definition for all methods
 void CgenNode::code_method_def(ostream& s) {
-  for (int i = features->first(); features->more(i); i = features->next(i)) {
+  cur_cgnode = this;
+  LOOP_LIST_NODE(i, features)
+  {
     method_class *method = dynamic_cast<method_class*>(features->nth(i));
     if (method != NULL) method->code(s);
   }
@@ -1199,11 +1225,14 @@ void method_class::code(ostream& s) {
   /**********************************/
   /************ prologue ************/
   /**********************************/
+  cur_env = new EnvType();
+  cur_env->enterscope();
   emit_push(ACC, s); // push 'so'
   emit_push(RA, s);
   fp_offset = WORD_SIZE * (formals->len() + 2); // 'so' and $ra
   // calculate formal offset
-  for (int i = formals->first(); formals->more(i); i = formals->next(i)) {
+  LOOP_LIST_NODE(i, formals)
+  {
     formal_class *arg = dynamic_cast<formal_class*>(formals->nth(i));
     Symbol name = arg->name;
     cur_env->addid(name, new int(fp_offset));
@@ -1226,6 +1255,7 @@ void method_class::code(ostream& s) {
   // <-- low ---              
   emit_addiu(SP, SP, WORD_SIZE * (num_locals + 3 + formals->len()), s);
   emit_jalr(RA, s);
+  cur_env->exitscope();
   /**********************************/
   /********** epilogue end **********/
   /**********************************/
@@ -1269,7 +1299,8 @@ static void code_dispatch(
     ostream& s) 
 {
   emit_push(FP, s);
-  for (int i = actual->first(); actual->more(i); i = actual->next(i)) {
+  LOOP_LIST_NODE(i, actual)
+  {
     actual->nth(i)->code(s);
     emit_push(ACC, s);
   }
@@ -1350,12 +1381,12 @@ void typcase_class::code(ostream &s) {
 }
 
 void block_class::code(ostream &s) {
-  for (int i = body->first(); body->more(i); i = body->next(i))
+  LOOP_LIST_NODE(i, body)
     body->nth(i)->code(s);
 }
 
 void let_class::code(ostream &s) {
-  // cur_env is set in cgen for method definition
+  // cur_env is set in cgen of method definition (method_class:code())
   cur_env->enterscope();
   cur_env->addid(identifier, new int(fp_offset));
   init->code(s);
@@ -1438,6 +1469,17 @@ void bool_const_class::code(ostream& s)
 }
 
 void new__class::code(ostream &s) {
+  CgenNodeP cgnode;
+  if (type_name == SELF_TYPE)
+    cgnode = cur_cgnode;
+  else
+    cgnode = cgen_classtable->lookup(type_name);
+  Symbol new_type = cgnode->get_name();
+  emit_partial_load_address(ACC, s); 
+  emit_protobj_ref(new_type, s);
+  emit_jal_method(Object, ::copy, s);
+  emit_push(FP, s);
+  emit_jal_init_ref(new_type, s);
 }
 
 void isvoid_class::code(ostream &s) {

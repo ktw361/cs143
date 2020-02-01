@@ -51,6 +51,8 @@ private:
    void code_proto_obj();
    void code_disptabs();
 
+   void code_method_defs();
+
 // The following creates an inheritance graph from
 // a list of classes.  The graph is implemented as
 // a tree of `CgenNode', and class names are placed
@@ -108,6 +110,7 @@ public:
    void code_attrs(ostream&) const;
    void build_disptab(ostream&);
    void code_disptab(ostream&) const;
+   void code_method_def(ostream&);
 
    int* get_method_offset(Symbol) const;
    int get_attr_offset(Symbol) const;

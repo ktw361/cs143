@@ -705,21 +705,19 @@ void CgenClassTable::code_proto_obj()
 //
 // Emit code for each class's dispatch table
 //
-void CgenClassTable::code_disptabs()
-{
+void CgenClassTable::code_disptabs() {
   // dfs perserve inheritance order
   CgenNodeP tree_root = root();
   tree_root->build_disptab(str);
 }
 
 // 
+// Emit code for each class's method definition
 //
-//
-/* void CgenClassTable::code_methods() */
-/* { */
-// TODO
-
-/* } */
+void CgenClassTable::code_method_defs() {
+  for(List<CgenNode> *l = nds; l; l = l->tl())
+    l->hd()->code_method_def(str);
+}
 
 
 CgenClassTable::CgenClassTable(Classes classes, ostream& s) : 
@@ -997,7 +995,7 @@ void CgenClassTable::code()
 //                   - the class methods
 //                   - etc...
   /* code_init(); */
-  /* code_methods(); */
+  code_method_defs();
 
 }
 
@@ -1029,6 +1027,7 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
    stringtable.add_string(name->get_string());          // Add class name to string table
 }
 
+// Build attribute table recursively
 void CgenNode::build_attrtab() {
   attr_tab->enterscope();
   Features feats = features;
@@ -1059,6 +1058,7 @@ void CgenNode::build_attrtab() {
     l->hd()->build_attrtab();
 }
 
+// Emit all attribute fields during *_protoObj definition
 void CgenNode::code_attrs(ostream &str) const {
   if (name == Object) return;
   if (name == Int || name == Bool) {
@@ -1094,6 +1094,8 @@ void CgenNode::code_attrs(ostream &str) const {
   }
 }
 
+// Build disptab table recursively,
+// and calls code_disptab() to emit dispatch table code.
 void CgenNode::build_disptab(ostream &str) {
   disp_offset->enterscope();
   disp_tab->enterscope();
@@ -1150,20 +1152,21 @@ void CgenNode::build_disptab(ostream &str) {
     l->hd()->build_disptab(str);
 }
 
+// Emit dispatch table for this CgenNode
 void CgenNode::code_disptab(ostream &str) const {
   emit_disptable_ref(name, str);
   str << LABEL;
   for (int i = 0; i != _num_methods; ++i) {
-    DispTabEntryP entry = disp_tab->probe(i);
-    if (entry != NULL)
-      str << WORD << entry->cls << METHOD_SEP << entry->method << endl;
-    else {
-      entry = parentnd->probe_entry(i);
-      str << WORD << entry->cls << METHOD_SEP << entry->method << endl;
-    }
+    DispTabEntryP entry = probe_entry(i);
+    str << WORD << entry->cls << METHOD_SEP << entry->method << endl;
   }
 }
 
+void CgenNode::code_method_def(ostream& str) {
+
+}
+
+// Map method name to offset O_f in dispatch table
 int* CgenNode::get_method_offset(Symbol id) const {
   int *ret = NULL;
   ret = disp_offset->probe(id);
@@ -1176,11 +1179,11 @@ int CgenNode::get_attr_offset(Symbol sym) const {
   return *attr_tab->lookup(sym);
 }
 
+// Retrive dispatch table entry from offset O_f
 DispTabEntryP CgenNode::probe_entry(int offset) const {
   DispTabEntryP ret = NULL;
   ret = disp_tab->probe(offset);
   if (ret != NULL) return ret;
-  if (name == Object) return ret;
   return get_parentnd()->probe_entry(offset);
 }
 

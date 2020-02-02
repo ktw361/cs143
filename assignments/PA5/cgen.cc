@@ -279,6 +279,9 @@ static void emit_protobj_ref(Symbol sym, ostream& s)
 static void emit_method_ref(Symbol classname, Symbol methodname, ostream& s)
 { s << classname << METHOD_SEP << methodname; }
 
+static void emit_method_def(Symbol classname, Symbol methodname, ostream& s)
+{ s << classname << METHOD_SEP << methodname << LABEL; }
+
 static void emit_jal_method(Symbol classname, Symbol methodname, ostream& s)
 { s << JAL << "\t" << classname << METHOD_SEP << methodname << endl; }
 
@@ -354,10 +357,11 @@ static void emit_push(char *reg, ostream& str)
 }
 
 //
-// Pop a register off the stack. The stack shrinks towards larger addresses.
+// Pop top of stack to a register. The stack shrinks towards larger addresses.
 //
-static void emit_pop(ostream& str)
+static void emit_pop(char *reg, ostream& str)
 {
+  emit_load(reg,4,SP,str);
   emit_addiu(SP,SP,4,str);
 }
 
@@ -729,8 +733,14 @@ void CgenClassTable::code_inits() {
 // Emit code for each class's method definition
 //
 void CgenClassTable::code_method_defs() {
-  for(List<CgenNode> *l = nds; l; l = l->tl())
+  for(List<CgenNode> *l = nds; l; l = l->tl()) {
+    Symbol cls_name = l->hd()->get_name(); 
+    if (cls_name == Object ||
+        cls_name == IO ||
+        cls_name == Str)
+      continue;
     l->hd()->code_method_def(str);
+  }
 }
 
 
@@ -1180,11 +1190,20 @@ void CgenNode::code_disptab(ostream &str) const {
 }
 
 // Emit *_init label definition
+// On entry, 'so' object in ACC
 void CgenNode::code_init(ostream& s) const {
   emit_init_ref(name, s);
   s << LABEL;
-  /* init->code(s); */
-  // TODO
+  LOOP_LIST_NODE(i, features)
+  {
+    emit_move(SELF, ACC, s); // save 'so' to $s0
+    attr_class *attr = dynamic_cast<attr_class*>(features->nth(i));
+    if (attr != NULL) {
+      int attr_offset = get_attr_offset(attr->name);
+      attr->init->code(s);
+      emit_store(ACC, WORD_SIZE * attr_offset, SELF, s);
+    }
+  }
 }
 
 // Emit method definition for all methods
@@ -1222,14 +1241,15 @@ DispTabEntryP CgenNode::probe_entry(int offset) const {
 // cgen function for Method definition 
 //******************************************************
 void method_class::code(ostream& s) {
+  emit_method_def(cur_cgnode->get_name(), name, s);
   /**********************************/
   /************ prologue ************/
   /**********************************/
   cur_env = new EnvType();
   cur_env->enterscope();
-  emit_push(ACC, s); // push 'so'
+  emit_move(SELF, ACC, s); // 'so' in $so
   emit_push(RA, s);
-  fp_offset = WORD_SIZE * (formals->len() + 2); // 'so' and $ra
+  fp_offset = WORD_SIZE * (formals->len() + 1); // $ra | ..args.. 
   // calculate formal offset
   LOOP_LIST_NODE(i, formals)
   {
@@ -1239,7 +1259,7 @@ void method_class::code(ostream& s) {
     fp_offset -= WORD_SIZE;
   }
   // calculate upper bound of sequential local variables
-  /* int num_locals = expr->num_locals(); */
+  /* int num_locals = expr->num_locals(); */ // TODO
   int num_locals = 100;
   emit_addiu(SP, SP, - WORD_SIZE * num_locals, s);
   /**********************************/
@@ -1250,9 +1270,10 @@ void method_class::code(ostream& s) {
   /************ epilogue ************/
   /**********************************/
   emit_load(RA, 0, FP, s);
+  emit_load(SELF, WORD_SIZE * (formals->len() + 1), FP, s);
   emit_load(FP, WORD_SIZE * (formals->len() + 2), FP, s);
-  //        --- num_locals | 
-  // <-- low ---              
+  //      ..locals[]..| $ra | ..args[].. | oso | ofp
+  // <-- low --           Address               -- high -->             
   emit_addiu(SP, SP, WORD_SIZE * (num_locals + 3 + formals->len()), s);
   emit_jalr(RA, s);
   cur_env->exitscope();
@@ -1276,7 +1297,7 @@ static int label_index = 0;
 
 static void code_var_ref(Symbol name, ostream& s) {
   if (name == self) {
-    emit_load(ACC, WORD_SIZE, FP, s); // load self object 'so'
+    emit_move(ACC, SELF, s);
     return;
   }
   // args and local vars
@@ -1287,8 +1308,7 @@ static void code_var_ref(Symbol name, ostream& s) {
   }
   // resort to attribute table
   *offset = cur_cgnode->get_attr_offset(name);
-  emit_load(ACC, WORD_SIZE, FP, s); // load self object 'so'
-  emit_load(ACC, WORD_SIZE * (*offset), FP, s);
+  emit_load(ACC, WORD_SIZE * (*offset), SELF, s);
 }
 
 static void code_dispatch(
@@ -1299,12 +1319,13 @@ static void code_dispatch(
     ostream& s) 
 {
   emit_push(FP, s);
+  emit_push(SELF, s);
   LOOP_LIST_NODE(i, actual)
   {
     actual->nth(i)->code(s);
     emit_push(ACC, s);
   }
-  expr->code(s);
+  expr->code(s);  // callee's 'so' in ACC
   int nonzero_label = label_index++;
   emit_bne(ACC, ZERO, nonzero_label, s);
   emit_load_string(
@@ -1329,17 +1350,18 @@ static void code_dispatch(
       << "is defined." << endl;
     exit(0);
   }
-  emit_load(ACC, WORD_SIZE, FP, s);           // load 'so'
-  emit_load(ACC, DISPTABLE_OFFSET, ACC, s);   // load dispTab
-  emit_load(ACC, WORD_SIZE * (*offset), ACC, s); // load method
-  emit_jalr(ACC, s);
+  // 'so' already in ACC
+  emit_load(T1, DISPTABLE_OFFSET, ACC, s);   // load dispTab
+  emit_load(T1, WORD_SIZE * (*offset), T1, s); // load method
+  emit_jalr(T1, s);
 }
 
 void assign_class::code(ostream &s) {
   // type check guarantees that 'self' will not be assigned
   expr->code(s);
-  emit_move(T1, ACC, s);
+  emit_push(ACC, s);
   code_var_ref(name, s);
+  emit_pop(T1, s);
   emit_move(ACC, T1, s);
 }
 
@@ -1403,8 +1425,7 @@ void plus_class::code(ostream &s) {
   e2->code(s);
   emit_jal_method(Object, ::copy, s); // copy() is method of tree_node
   emit_fetch_int(T2, ACC, s);       // load val field of e2 
-  emit_load(T1, 0, SP, s);          // load val field of e1
-  emit_pop(s);
+  emit_pop(T1, s);                  // load val field of e1
   emit_add(T1, T1, T2, s);
   emit_store_int(T1, ACC, s);
 }
@@ -1428,10 +1449,10 @@ void eq_class::code(ostream &s) {
   e1->code(s);
   emit_push(ACC, s);
   e2->code(s);
-  emit_load(T2, 0, SP, s); // beq acc, t2, _load_true_label
+  emit_move(T2, ACC, s);
+  emit_pop(T1, s);
   int true_label = label_index++;
-  emit_beq(ACC, T2, true_label, s);
-  emit_move(T1, ACC, s);
+  emit_beq(T1, T2, true_label, s); // beq t1, t2, _load_true_label
   emit_load_truebool(ACC, s);
   emit_load_falsebool(A1, s);
   emit_jal(EQUALITY_TEST, s);         // if true, true const in a0, 
@@ -1440,7 +1461,6 @@ void eq_class::code(ostream &s) {
   emit_branch(end_label, s);
   emit_label_def(true_label, s);
   emit_load_truebool(ACC, s);
-  emit_branch(end_label, s);
   emit_label_def(end_label, s);
 }
 

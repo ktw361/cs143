@@ -166,7 +166,20 @@ TODO? Attribute table:
   is also Environment, with outer most scope as attribute,
   and function argument and let/case add variable declaration to inner scope.
 
+TODO check use $t1 before code() (in wrong place)
+
 The configuration of $fp resembles $rbp in gcc calling convention.
+
+There are 4 kind of interactions with Env table and stack:
+  (1) static_dispatch/dispatch
+  (2) method definition
+  (3) let/case
+  (4) variable reference(attr, arg, local)
+  where (1) modify stack
+        (2) modify stack & Env.addid
+        (3) Env.addid 
+        (4) Env.lookup
+
   
 code:
   equality_test() already done void check for us

@@ -37,7 +37,7 @@ extern int cgen_debug;
 static CgenClassTableP cgen_classtable;
 static CgenNodeP cur_cgnode;
 static EnvType *cur_env;
-static int fp_offset = 0; // in bytes
+static int fp_offset = 0; // in words
 
 //
 // Three symbols from the semantic analyzer (semant.cc) are used.
@@ -1009,11 +1009,10 @@ void CgenClassTable::code()
   // class_nameTab and class_objTab
   code_name_table();
   code_obj_table();
-
-  // emit prototype objects for each class
-  code_proto_obj();
   // dispatch_table
   code_disptabs();
+  // emit prototype objects for each class
+  code_proto_obj();
 
   if (cgen_debug) cout << "coding global text" << endl;
   code_global_text();
@@ -1193,23 +1192,31 @@ void CgenNode::code_disptab(ostream &str) const {
   }
 }
 
-// Emit *_init label definition
-// On entry, 'so' object in ACC
-void CgenNode::code_init(ostream& s) const {
-  emit_init_ref(name, s);
-  s << LABEL;
-  emit_move(SELF, ACC, s); // save 'so' to $s0
+// Utility function for code_init().
+// Emit code of attribute initialization in current class 
+void CgenNode::code_init_attr(ostream& s) const {
+  if (name == Object) return;
+  parentnd->code_init_attr(s);
   LOOP_LIST_NODE(i, features)
   {
     attr_class *attr = dynamic_cast<attr_class*>(features->nth(i));
     if (attr != NULL) {
       int attr_offset = get_attr_offset(attr->name);
       attr->init->code(s);
-      emit_store(ACC, WORD_SIZE * attr_offset, SELF, s);
+      emit_store(ACC, attr_offset, SELF, s);
     }
   }
-  emit_load(FP, WORD_SIZE * 2, FP, s);
-  emit_load(SELF, WORD_SIZE, FP, s);
+}
+
+// Emit *_init label definition
+// On entry, 'so' object in ACC
+void CgenNode::code_init(ostream& s) const {
+  emit_init_ref(name, s);
+  s << LABEL;
+  emit_move(SELF, ACC, s); // save 'so' to $s0
+  code_init_attr(s);
+  emit_load(FP, 2, FP, s);
+  emit_load(SELF, 1, FP, s);
   emit_load(RA, 0, FP, s);
   emit_return(s);
 }
@@ -1257,19 +1264,18 @@ void method_class::code(ostream& s) {
   cur_env->enterscope();
   emit_move(SELF, ACC, s); // 'so' in $so
   emit_push(RA, s);
-  fp_offset = WORD_SIZE * (formals->len() + 1); // $ra | ..args.. 
+  fp_offset = formals->len() + 1; // $ra | ..args.. 
   // calculate formal offset
   LOOP_LIST_NODE(i, formals)
   {
     formal_class *arg = dynamic_cast<formal_class*>(formals->nth(i));
     Symbol name = arg->name;
-    cur_env->addid(name, new int(fp_offset));
-    fp_offset -= WORD_SIZE;
+    cur_env->addid(name, new int(fp_offset--));
   }
   // calculate upper bound of sequential local variables
   /* int num_locals = expr->num_locals(); */ // TODO
-  int num_locals = 100;
-  emit_addiu(SP, SP, - WORD_SIZE * num_locals, s);
+  int num_locals = 0;
+  emit_addiu(SP, SP, - num_locals, s);
   /**********************************/
   /********* prologue end ***********/
   /**********************************/
@@ -1278,8 +1284,8 @@ void method_class::code(ostream& s) {
   /************ epilogue ************/
   /**********************************/
   emit_load(RA, 0, FP, s);
-  emit_load(SELF, WORD_SIZE * (formals->len() + 1), FP, s);
-  emit_load(FP, WORD_SIZE * (formals->len() + 2), FP, s);
+  emit_load(SELF, formals->len() + 1, FP, s);
+  emit_load(FP, formals->len() + 2, FP, s);
   //      ..locals[]..| $ra | ..args[].. | oso | ofp
   // <-- low --           Address               -- high -->             
   emit_addiu(SP, SP, WORD_SIZE * (num_locals + 3 + formals->len()), s);
@@ -1311,12 +1317,12 @@ static void code_var_ref(Symbol name, ostream& s) {
   // args and local vars
   int *offset = cur_env->lookup(name);
   if (offset != NULL) {
-    emit_load(ACC, WORD_SIZE * (*offset), FP, s);
+    emit_load(ACC, *offset, FP, s);
     return;
   }
   // resort to attribute table
   *offset = cur_cgnode->get_attr_offset(name);
-  emit_load(ACC, WORD_SIZE * (*offset), SELF, s);
+  emit_load(ACC, *offset, SELF, s);
 }
 
 static void code_dispatch(
@@ -1360,7 +1366,7 @@ static void code_dispatch(
   }
   // 'so' already in ACC
   emit_load(T1, DISPTABLE_OFFSET, ACC, s);   // load dispTab
-  emit_load(T1, WORD_SIZE * (*offset), T1, s); // load method
+  emit_load(T1, *offset, T1, s); // load method
   emit_jalr(T1, s);
 }
 
@@ -1421,8 +1427,7 @@ void let_class::code(ostream &s) {
   cur_env->enterscope();
   cur_env->addid(identifier, new int(fp_offset));
   init->code(s);
-  emit_store(ACC, fp_offset, FP, s);
-  fp_offset -= WORD_SIZE;
+  emit_store(ACC, fp_offset--, FP, s);
   body->code(s);
   cur_env->exitscope();
 }
@@ -1503,7 +1508,7 @@ void new__class::code(ostream &s) {
   if (type_name == SELF_TYPE) {
     // copy protObj
     emit_load(T1, TAG_OFFSET, SELF, s); // i = class_tag
-    emit_load_imm(T2, WORD_SIZE * 2, s);
+    emit_load_imm(T2, 2, s);
     emit_mul(T1, T1, T2, s);
     emit_load_address(ACC, CLASSOBJTAB, s);
     emit_add(ACC, ACC, T1, s);  

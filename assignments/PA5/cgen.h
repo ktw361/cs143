@@ -111,6 +111,7 @@ public:
    void code_attrs(ostream&) const;
    void build_disptab(ostream&);
    void code_disptab(ostream&) const;
+   void code_init_attr(ostream&) const;
    void code_init(ostream&) const;
    void code_method_def(ostream&);
 

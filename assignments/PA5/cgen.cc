@@ -1210,14 +1210,21 @@ void CgenNode::code_init_attr(ostream& s) const {
 
 // Emit *_init label definition
 // On entry, 'so' object in ACC
+// Returns value is also 'so'
 void CgenNode::code_init(ostream& s) const {
   emit_init_ref(name, s);
   s << LABEL;
-  emit_move(SELF, ACC, s); // save 'so' to $s0
+  emit_push(FP, s);           // ofp
+  emit_push(SELF, s);         // oso
+  emit_move(SELF, ACC, s);
+  emit_push(RA, s);           // ra
+  emit_addiu(FP, SP, WORD_SIZE, s); // get current fp
   code_init_attr(s);
-  emit_load(FP, 2, FP, s);
-  emit_load(SELF, 1, FP, s);
-  emit_load(RA, 0, FP, s);
+  emit_move(ACC, SELF, s);    // returns 'so'
+  emit_load(RA, 0, FP, s);    // restore ra
+  emit_load(SELF, 1, FP, s);  // restore oso
+  emit_load(FP, 2, FP, s);    // restore ofp
+  emit_addiu(SP, SP, WORD_SIZE * PROLOG_SIZE, s);
   emit_return(s);
 }
 
@@ -1262,9 +1269,12 @@ void method_class::code(ostream& s) {
   /**********************************/
   cur_env = new EnvType();
   cur_env->enterscope();
+  emit_push(FP, s);
+  emit_push(SELF, s);
   emit_move(SELF, ACC, s); // 'so' in $so
   emit_push(RA, s);
-  fp_offset = formals->len() + 1; // $ra | ..args.. 
+  emit_addiu(FP, SP, WORD_SIZE, s); // get current fp
+  fp_offset = formals->len() + PROLOG_SIZE; // $ra | $oso | $ofp | ..args.. 
   // calculate formal offset
   LOOP_LIST_NODE(i, formals)
   {
@@ -1275,20 +1285,23 @@ void method_class::code(ostream& s) {
   // calculate upper bound of sequential local variables
   /* int num_locals = expr->num_locals(); */ // TODO
   int num_locals = 0;
-  emit_addiu(SP, SP, - num_locals, s);
+  emit_addiu(SP, SP, - WORD_SIZE * num_locals, s);
   /**********************************/
   /********* prologue end ***********/
   /**********************************/
+
   expr->code(s);
+
   /**********************************/
   /************ epilogue ************/
   /**********************************/
   emit_load(RA, 0, FP, s);
   emit_load(SELF, formals->len() + 1, FP, s);
   emit_load(FP, formals->len() + 2, FP, s);
-  //      ..locals[]..| $ra | ..args[].. | oso | ofp
+  //      ..locals[]..| $ra | | oso | ofp | ..args[].. 
   // <-- low --           Address               -- high -->             
-  emit_addiu(SP, SP, WORD_SIZE * (num_locals + 3 + formals->len()), s);
+  emit_addiu(SP, SP, 
+      WORD_SIZE * (num_locals + formals->len() + PROLOG_SIZE), s);
   emit_return(s);
   cur_env->exitscope();
   /**********************************/
@@ -1332,8 +1345,6 @@ static void code_dispatch(
     Expressions actual, 
     ostream& s) 
 {
-  emit_push(FP, s);
-  emit_push(SELF, s);
   LOOP_LIST_NODE(i, actual)
   {
     actual->nth(i)->code(s);
@@ -1518,8 +1529,6 @@ void new__class::code(ostream &s) {
     // init
     emit_pop(ACC, s);
     emit_load(ACC, 4, ACC, s); // class_obj[8*i+4] 
-    emit_push(FP, s);
-    emit_push(SELF, s);
     emit_jalr(T1, s);
     return;
   }
@@ -1528,8 +1537,6 @@ void new__class::code(ostream &s) {
   emit_partial_load_address(ACC, s); 
   emit_protobj_ref(new_type, s);
   emit_jal_method(Object, ::copy, s);
-  emit_push(FP, s);
-  emit_push(SELF, s);
   emit_jal_init_ref(new_type, s);
 }
 

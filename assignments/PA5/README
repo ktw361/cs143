@@ -152,11 +152,12 @@ Instructions
 Write-up for PA5
 ----------------
 Mynotes:
+-
     CgenClassTable itself is a mapping <Class(Symbol), CgenNode>
     class_nameTab is <Tag(int), class name (String) > for runtime
     class_objTab is <Tag(int), prototype object...> for runtime 
 
-Dispatch table:
+- Dispatch table:
   OffsetT stores mapping from method name to 'dispTab offset' O_f: <f, O_f>
   TableT stores mapping from offset to mips code, <O_f, Code>
 
@@ -170,18 +171,26 @@ TODO check use $t1 before code() (in wrong place)
 
 The configuration of $fp resembles $rbp in gcc calling convention.
 
-There are 4 kind of interactions with Env table and stack:
+- There are 4 kind of interactions with Env table and stack:
   (1) static_dispatch/dispatch
   (2) method definition
   (3) let/case
   (4) variable reference(attr, arg, local)
-  where (1) modify stack
-        (2) modify stack & Env.addid
+  where (1) modify stack (push args)
+        (2) modify stack (push fp, so, ra, alloc locals) & Env.addid
         (3) Env.addid 
         (4) Env.lookup
 
-  
-code:
+- *_init should put initialized `self` back in a0
+
+- cool-runtime in trap.handler will:
+    set $s0 to 'so', set $a0 to 'so'
+  but will not:
+    push fp, push $s0
+  Thus for dispatch code gen we will not push fp & so
+  while in method def we push fp & so, which is different from lec12 slide
+
+- code:
   equality_test() already done void check for us
 
 TODO: Int uses val=char*?

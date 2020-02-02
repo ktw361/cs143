@@ -9,6 +9,7 @@ enum Basicness     {Basic, NotBasic};
 #define FALSE 0
 
 #define TAGS 6
+#define PROLOG_SIZE  3
 
 class CgenClassTable;
 typedef CgenClassTable *CgenClassTableP;

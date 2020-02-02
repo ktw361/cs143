@@ -1193,10 +1193,10 @@ void CgenNode::code_disptab(ostream &str) const {
 // On entry, 'so' object in ACC
 void CgenNode::code_init(ostream& s) const {
   emit_init_ref(name, s);
+  emit_move(SELF, ACC, s); // save 'so' to $s0
   s << LABEL;
   LOOP_LIST_NODE(i, features)
   {
-    emit_move(SELF, ACC, s); // save 'so' to $s0
     attr_class *attr = dynamic_cast<attr_class*>(features->nth(i));
     if (attr != NULL) {
       int attr_offset = get_attr_offset(attr->name);
@@ -1204,6 +1204,10 @@ void CgenNode::code_init(ostream& s) const {
       emit_store(ACC, WORD_SIZE * attr_offset, SELF, s);
     }
   }
+  emit_load(FP, WORD_SIZE * 2, FP, s);
+  emit_load(SELF, WORD_SIZE, FP, s);
+  emit_load(RA, 0, FP, s);
+  emit_return(s);
 }
 
 // Emit method definition for all methods
@@ -1275,7 +1279,7 @@ void method_class::code(ostream& s) {
   //      ..locals[]..| $ra | ..args[].. | oso | ofp
   // <-- low --           Address               -- high -->             
   emit_addiu(SP, SP, WORD_SIZE * (num_locals + 3 + formals->len()), s);
-  emit_jalr(RA, s);
+  emit_return(s);
   cur_env->exitscope();
   /**********************************/
   /********** epilogue end **********/
@@ -1366,6 +1370,7 @@ void assign_class::code(ostream &s) {
 }
 
 void static_dispatch_class::code(ostream &s) {
+  // TODO if dispatch to SELFTYPE?
   code_dispatch(expr, type_name, name, actual, s);
 }
 
@@ -1489,16 +1494,33 @@ void bool_const_class::code(ostream& s)
 }
 
 void new__class::code(ostream &s) {
-  CgenNodeP cgnode;
-  if (type_name == SELF_TYPE)
-    cgnode = cur_cgnode;
-  else
-    cgnode = cgen_classtable->lookup(type_name);
+  // the 'so' is NOT cgnode->name statically,
+  // rather, it is the 'so' that passed in from caller dynamically
+  if (type_name == SELF_TYPE) {
+    // copy protObj
+    emit_load(T1, TAG_OFFSET, SELF, s); // i = class_tag
+    emit_load_imm(T2, WORD_SIZE * 2, s);
+    emit_mul(T1, T1, T2, s);
+    emit_load_address(ACC, CLASSOBJTAB, s);
+    emit_add(ACC, ACC, T1, s);  
+    emit_push(ACC, s);          // caching (class_objTab+8*i)
+    emit_load(ACC, 0, ACC, s);  // class_objTab[8*i]
+    emit_jal_method(Object, ::copy, s);
+    // init
+    emit_pop(ACC, s);
+    emit_load(ACC, 4, ACC, s); // class_obj[8*i+4] 
+    emit_push(FP, s);
+    emit_push(SELF, s);
+    emit_jalr(T1, s);
+    return;
+  }
+  CgenNodeP cgnode = cgen_classtable->lookup(type_name);
   Symbol new_type = cgnode->get_name();
   emit_partial_load_address(ACC, s); 
   emit_protobj_ref(new_type, s);
   emit_jal_method(Object, ::copy, s);
   emit_push(FP, s);
+  emit_push(SELF, s);
   emit_jal_init_ref(new_type, s);
 }
 

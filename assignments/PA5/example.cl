@@ -19,7 +19,7 @@ class B inherits A {
 
 class C inherits A {
   c : Int;
-  h() : Int { 3};
+  h() : Int { 3+ 44};
 };
 
 Class Foo inherits C {

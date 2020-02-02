@@ -669,8 +669,12 @@ void CgenClassTable::code_name_table()
 {
   // emit class_nameTab
   str << CLASSNAMETAB << LABEL;
-  for (int i = 0; i != tags; ++i)
-    str << WORD << name_tab->probe(i) << endl;
+  for (int i = 0; i != tags; ++i) {
+    Symbol name = name_tab->probe(i);
+    str << WORD;
+    stringtable.lookup_string(name->get_string())->code_ref(str);
+    str << endl;
+  }
 }
 
 // Emint code for class_objTab
@@ -1193,8 +1197,8 @@ void CgenNode::code_disptab(ostream &str) const {
 // On entry, 'so' object in ACC
 void CgenNode::code_init(ostream& s) const {
   emit_init_ref(name, s);
-  emit_move(SELF, ACC, s); // save 'so' to $s0
   s << LABEL;
+  emit_move(SELF, ACC, s); // save 'so' to $s0
   LOOP_LIST_NODE(i, features)
   {
     attr_class *attr = dynamic_cast<attr_class*>(features->nth(i));

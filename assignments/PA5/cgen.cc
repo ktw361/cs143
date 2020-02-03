@@ -1372,9 +1372,9 @@ static void code_dispatch(
 
   CgenNodeP cgnode;
   if (type_name != NULL)
-    cgnode = cgen_classtable->lookup(type_name); // static dispatch
+    cgnode = cgen_classtable->lookup(type_name);        // static dispatch
   else
-    cgnode = cur_cgnode;                    // default dispatch
+    cgnode = cgen_classtable->lookup(expr->get_type()); // default dispatch
 
   int *offset = cgnode->get_method_offset(name);
   if (offset == NULL) {

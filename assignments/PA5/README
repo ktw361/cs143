@@ -193,6 +193,9 @@ The configuration of $fp resembles $rbp in gcc calling convention.
 - code:
   equality_test() already done void check for us
 
+- assign_class and object_class(var reference) should not share same code,
+  they have two different semantics: one is fetching value, one is assign to address
+
 TODO: Int uses val=char*?
 
 Int:

@@ -368,7 +368,7 @@ static void emit_push(char *reg, ostream& str)
 //
 static void emit_pop(char *reg, ostream& str)
 {
-  emit_load(reg,4,SP,str);
+  emit_load(reg,1,SP,str);
   emit_addiu(SP,SP,4,str);
 }
 
@@ -750,6 +750,8 @@ void CgenClassTable::code_method_defs() {
         cls_name == IO ||
         cls_name == Str)
       continue;
+    if (cgen_debug) cout << "coding class " << cls_name << " method" << endl;
+    if (cgen_debug) l->hd()->code_method_def(cout);
     l->hd()->code_method_def(str);
   }
 }
@@ -992,6 +994,8 @@ void CgenNode::set_parentnd(CgenNodeP p)
 //
 void CgenClassTable::build_class_attrtab() 
 {
+  if (cgen_debug)
+    cout << "Building class attribute table" << endl;
   CgenNodeP tree_root = root();
   tree_root->build_attrtab();
 }
@@ -1015,11 +1019,16 @@ void CgenClassTable::code()
 //                   - dispatch tables
 //
   // class_nameTab and class_objTab
+  if (cgen_debug) cout << "coding name table" << endl;
   code_name_table();
+  if (cgen_debug) cout << "coding object table" << endl;
   code_obj_table();
+
   // dispatch_table
+  if (cgen_debug) cout << "coding dispatch table" << endl;
   code_disptabs();
   // emit prototype objects for each class
+  if (cgen_debug) cout << "coding proto object" << endl;
   code_proto_obj();
 
   if (cgen_debug) cout << "coding global text" << endl;
@@ -1029,7 +1038,9 @@ void CgenClassTable::code()
 //                   - object initializer
 //                   - the class methods
 //                   - etc...
+  if (cgen_debug) cout << "coding object initializer" << endl;
   code_inits();
+  if (cgen_debug) cout << "coding class methods" << endl;
   code_method_defs();
 
 }
@@ -1068,7 +1079,7 @@ void CgenNode::build_attrtab() {
   Features feats = features;
 
   if (name == Object) {
-    _num_attrs = 0;
+    _num_attrs = DEFAULT_OBJFIELDS;
     // dfs step
     for (List<CgenNode> *l = children; l; l = l->tl())
       l->hd()->build_attrtab();
@@ -1271,6 +1282,7 @@ DispTabEntryP CgenNode::probe_entry(int offset) const {
 // cgen function for Method definition 
 //******************************************************
 void method_class::code(ostream& s) {
+  if (cgen_debug) cout << pad(2) << "coding " << name << endl;
   emit_method_def(cur_cgnode->get_name(), name, s);
   /**********************************/
   /************ prologue ************/
@@ -1330,22 +1342,6 @@ void method_class::code(ostream& s) {
 
 static int label_index = 0;
 
-static void code_var_ref(Symbol name, ostream& s) {
-  if (name == self) {
-    emit_move(ACC, SELF, s);
-    return;
-  }
-  // args and local vars
-  int *offset = cur_env->lookup(name);
-  if (offset != NULL) {
-    emit_load(ACC, *offset, FP, s);
-    return;
-  }
-  // resort to attribute table
-  *offset = cur_cgnode->get_attr_offset(name);
-  emit_load(ACC, *offset, SELF, s);
-}
-
 static void code_dispatch(
     Expression expr, 
     Symbol type_name, 
@@ -1390,24 +1386,39 @@ static void code_dispatch(
 }
 
 void assign_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code assign" << endl;
   // type check guarantees that 'self' will not be assigned
   expr->code(s);
   emit_push(ACC, s);
-  code_var_ref(name, s);
+
+  // args and local vars
+  int *offset = cur_env->lookup(name);
+  if (offset != NULL) {
+    if (cgen_debug) cout << pad(6) << "found arg/local" << endl;
+    emit_addiu(ACC, FP, WORD_SIZE * (*offset), s);
+  } else {
+    // resort to attribute table
+    if (cgen_debug) cout << pad(6) << "found attr" << endl;
+    emit_addiu(ACC, SELF, WORD_SIZE *cur_cgnode->get_attr_offset(name), s);
+  }
+
   emit_pop(T1, s);
-  emit_move(ACC, T1, s);
+  emit_store(T1, 0, ACC, s);
 }
 
 void static_dispatch_class::code(ostream &s) {
   // TODO if dispatch to SELFTYPE?
+  if (cgen_debug) cout << pad(4) << "code static dispatch" << endl;
   code_dispatch(expr, type_name, name, actual, s);
 }
 
 void dispatch_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code dispatch" << endl;
   code_dispatch(expr, NULL, name, actual, s);
 }
 
 void cond_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code cond" << endl;
   pred->code(s);
   emit_fetch_int(ACC, ACC, s);
   int false_label = label_index++;
@@ -1421,6 +1432,7 @@ void cond_class::code(ostream &s) {
 }
 
 void loop_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code cond" << endl;
   int pred_label = label_index++;
   emit_label_def(pred_label, s);
   pred->code(s);
@@ -1437,11 +1449,13 @@ void typcase_class::code(ostream &s) {
 }
 
 void block_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code block" << endl;
   LOOP_LIST_NODE(i, body)
     body->nth(i)->code(s);
 }
 
 void let_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code let" << endl;
   // cur_env is set in cgen of method definition (method_class:code())
   cur_env->enterscope();
   cur_env->addid(identifier, new int(fp_offset));
@@ -1452,6 +1466,7 @@ void let_class::code(ostream &s) {
 }
 
 void plus_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code plus" << endl;
   e1->code(s);
   emit_fetch_int(ACC, ACC, s);  // push val field of e1
   emit_push(ACC, s);
@@ -1479,6 +1494,7 @@ void lt_class::code(ostream &s) {
 }
 
 void eq_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code eq" << endl;
   e1->code(s);
   emit_push(ACC, s);
   e2->code(s);
@@ -1522,6 +1538,7 @@ void bool_const_class::code(ostream& s)
 }
 
 void new__class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code new" << endl;
   // the 'so' is NOT cgnode->name statically,
   // rather, it is the 'so' that passed in from caller dynamically
   if (type_name == SELF_TYPE) {
@@ -1548,6 +1565,7 @@ void new__class::code(ostream &s) {
 }
 
 void isvoid_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code isvoid" << endl;
   e1->code(s);
   emit_fetch_int(ACC, ACC, s);
   int false_label = label_index++;
@@ -1564,7 +1582,21 @@ void no_expr_class::code(ostream &s) {
 }
 
 void object_class::code(ostream &s) {
-  code_var_ref(name, s);
+  if (cgen_debug) cout << pad(4) << "code object" << endl;
+  if (name == self) {
+    emit_move(ACC, SELF, s);
+    return;
+  }
+  // args and local vars
+  int *offset = cur_env->lookup(name);
+  if (offset != NULL) {
+    if (cgen_debug) cout << pad(6) << "found arg/local" << endl;
+    emit_load(ACC, *offset, FP, s);
+    return;
+  }
+  // resort to attribute table
+  if (cgen_debug) cout << pad(6) << "found attr" << endl;
+  emit_load(ACC, cur_cgnode->get_attr_offset(name), SELF, s);
 }
 
 

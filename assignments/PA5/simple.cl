@@ -1,5 +1,11 @@
 class Main {
+  a : Int <- 2;
+  s : String <- "init";
   main() : Object {
-    (new IO).out_int(13)
+{
+    a <- 9;
+    s <- "next";
+    (new IO).out_string(s);
+}
   };
 };

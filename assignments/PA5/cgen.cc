@@ -34,7 +34,7 @@ extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
 
 // TODO check necessary
-static CgenClassTableP cgen_classtable;
+static CgenClassTableP cgen_classtable; // staticDisp and new__class
 static CgenNodeP cur_cgnode;
 static EnvType *cur_env;
 static int fp_offset = 0; // in words
@@ -268,13 +268,20 @@ static void emit_init_ref(Symbol sym, ostream& s)
 { s << sym << CLASSINIT_SUFFIX; }
 
 static void emit_jal_init_ref(Symbol sym, ostream& s)
-{ s << JAL << "\t" << sym << CLASSINIT_SUFFIX; }
+{ s << JAL << sym << CLASSINIT_SUFFIX << endl; }
 
 static void emit_label_ref(int l, ostream &s)
 { s << "label" << l; }
 
 static void emit_protobj_ref(Symbol sym, ostream& s)
 { s << sym << PROTOBJ_SUFFIX; }
+
+static void emit_load_protobj_ref(char *dest_reg, Symbol sym, ostream& s)
+{
+  emit_partial_load_address(dest_reg, s);
+  emit_protobj_ref(sym, s);
+  s << endl;
+}
 
 static void emit_method_ref(Symbol classname, Symbol methodname, ostream& s)
 { s << classname << METHOD_SEP << methodname; }
@@ -283,7 +290,7 @@ static void emit_method_def(Symbol classname, Symbol methodname, ostream& s)
 { s << classname << METHOD_SEP << methodname << LABEL; }
 
 static void emit_jal_method(Symbol classname, Symbol methodname, ostream& s)
-{ s << JAL << "\t" << classname << METHOD_SEP << methodname << endl; }
+{ s << JAL << classname << METHOD_SEP << methodname << endl; }
 
 static void emit_label_def(int l, ostream &s)
 {
@@ -758,6 +765,7 @@ CgenClassTable::CgenClassTable(Classes classes, ostream& s) :
    stringclasstag = 4 /* Change to your String class tag here */;
    mainclasstag   = 5;
 
+   cgen_classtable = this;
    enterscope();
    name_tab->enterscope();
    if (cgen_debug) cout << "Building CgenClassTable" << endl;
@@ -1363,8 +1371,8 @@ static void code_dispatch(
   emit_label_def(nonzero_label, s);
 
   CgenNodeP cgnode;
-  if (name != NULL)
-    cgnode = cgen_classtable->lookup(name); // static dispatch
+  if (type_name != NULL)
+    cgnode = cgen_classtable->lookup(type_name); // static dispatch
   else
     cgnode = cur_cgnode;                    // default dispatch
 
@@ -1396,7 +1404,7 @@ void static_dispatch_class::code(ostream &s) {
 }
 
 void dispatch_class::code(ostream &s) {
-  code_dispatch(expr, type_name, NULL, actual, s);
+  code_dispatch(expr, NULL, name, actual, s);
 }
 
 void cond_class::code(ostream &s) {
@@ -1534,8 +1542,7 @@ void new__class::code(ostream &s) {
   }
   CgenNodeP cgnode = cgen_classtable->lookup(type_name);
   Symbol new_type = cgnode->get_name();
-  emit_partial_load_address(ACC, s); 
-  emit_protobj_ref(new_type, s);
+  emit_load_protobj_ref(ACC, new_type, s);
   emit_jal_method(Object, ::copy, s);
   emit_jal_init_ref(new_type, s);
 }

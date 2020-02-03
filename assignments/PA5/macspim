@@ -1,0 +1,3 @@
+#!/bin/csh -f
+# script for run spim installed in mac system
+spim -exception_file ../../lib/trap.handler -file $*

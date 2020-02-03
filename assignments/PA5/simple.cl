@@ -1,5 +1,5 @@
 class Main {
   main() : Object {
-    13
+    (new IO).out_int(13)
   };
 };

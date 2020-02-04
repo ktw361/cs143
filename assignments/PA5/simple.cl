@@ -1,11 +1,9 @@
 class Main {
-  a : Int <- 2;
-  s : String <- "init";
+a : Bool;
+vd : Object;
   main() : Object {
 {
-    a <- 9;
-    s <- "next";
-    (new IO).out_string(s);
+  let a : Int in (new IO).out_int(a);
 }
   };
 };

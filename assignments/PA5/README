@@ -190,11 +190,12 @@ The configuration of $fp resembles $rbp in gcc calling convention.
   Thus for dispatch code gen we will not push fp & so
   while in method def we push fp & so, which is different from lec12 slide
 
-- code:
-  equality_test() already done void check for us
-
 - assign_class and object_class(var reference) should not share same code,
   they have two different semantics: one is fetching value, one is assign to address
+- not & neg should call Object.copy
+
+- code:
+  equality_test() already done void check for us
 
 TODO: Int uses val=char*?
 

@@ -264,6 +264,12 @@ static void emit_gc_assign(ostream& s)
 static void emit_disptable_ref(Symbol sym, ostream& s)
 {  s << sym << DISPTAB_SUFFIX; }
 
+static void emit_load_disptable(char *dest_reg, Symbol sym, ostream& s)
+{ 
+  emit_partial_load_address(dest_reg, s); 
+  emit_disptable_ref(sym, s); s << endl;
+}
+
 static void emit_init_ref(Symbol sym, ostream& s)
 { s << sym << CLASSINIT_SUFFIX; }
 
@@ -751,7 +757,6 @@ void CgenClassTable::code_method_defs() {
         cls_name == Str)
       continue;
     if (cgen_debug) cout << "coding class " << cls_name << " method" << endl;
-    if (cgen_debug) l->hd()->code_method_def(cout);
     l->hd()->code_method_def(str);
   }
 }
@@ -1107,6 +1112,7 @@ void CgenNode::build_attrtab() {
 
 // Emit all attribute fields during *_protoObj definition
 void CgenNode::code_attrs(ostream &str) const {
+  // Handle basic protoObj
   if (name == Object) return;
   if (name == Int || name == Bool) {
     str << WORD << "0" << endl;
@@ -1119,6 +1125,7 @@ void CgenNode::code_attrs(ostream &str) const {
     return;
   }
 
+  // Handle non-basic protObj
   get_parentnd()->code_attrs(str);
   Features feats = features;
   LOOP_LIST_NODE(i, feats)
@@ -1130,13 +1137,13 @@ void CgenNode::code_attrs(ostream &str) const {
         IntEntryP int_default = inttable.lookup_string("0");
         str << WORD; int_default->code_ref(str); str << endl;
       } else if (type == Bool) {
-        falsebool.code_ref(str); str << endl;
+        str << WORD; falsebool.code_ref(str); str << endl;
       } else if (type == Str) {
         StringEntryP str_default = stringtable.lookup_string("");
         str << WORD; str_default->code_ref(str); str << endl;
       } else {
         // "void" for other classes
-        str << WORD << "0" << str << endl;
+        str << WORD << "0" << endl;
       }
     }
   }
@@ -1214,13 +1221,18 @@ void CgenNode::code_disptab(ostream &str) const {
 // Utility function for code_init().
 // Emit code of attribute initialization in current class 
 void CgenNode::code_init_attr(ostream& s) const {
-  if (name == Object) return;
-  parentnd->code_init_attr(s);
+  if (name == Object ||
+      name == Int || 
+      name == Bool ||
+      name == Str) return;
   LOOP_LIST_NODE(i, features)
   {
     attr_class *attr = dynamic_cast<attr_class*>(features->nth(i));
     if (attr != NULL) {
       int attr_offset = get_attr_offset(attr->name);
+      // simply skip no_expr, as attr already has default value
+      if (dynamic_cast<no_expr_class*>(attr->init))
+        continue;
       attr->init->code(s);
       emit_store(ACC, attr_offset, SELF, s);
     }
@@ -1238,6 +1250,8 @@ void CgenNode::code_init(ostream& s) const {
   emit_move(SELF, ACC, s);
   emit_push(RA, s);           // ra
   emit_addiu(FP, SP, WORD_SIZE, s); // get current fp
+  if (name != Object)
+    emit_jal_init_ref(parentnd->get_name(), s);
   code_init_attr(s);
   emit_move(ACC, SELF, s);    // returns 'so'
   emit_load(RA, 0, FP, s);    // restore ra
@@ -1294,18 +1308,19 @@ void method_class::code(ostream& s) {
   emit_move(SELF, ACC, s); // 'so' in $so
   emit_push(RA, s);
   emit_addiu(FP, SP, WORD_SIZE, s); // get current fp
-  fp_offset = formals->len() + PROLOG_SIZE; // $ra | $oso | $ofp | ..args.. 
+  fp_offset = PROLOG_SIZE + formals->len(); // $ra | $oso | $ofp | ..args.. 
   // calculate formal offset
   LOOP_LIST_NODE(i, formals)
   {
     formal_class *arg = dynamic_cast<formal_class*>(formals->nth(i));
     Symbol name = arg->name;
-    cur_env->addid(name, new int(fp_offset--));
+    cur_env->addid(name, new int(--fp_offset));
   }
   // calculate upper bound of sequential local variables
   /* int num_locals = expr->num_locals(); */ // TODO
   int num_locals = 0;
   emit_addiu(SP, SP, - WORD_SIZE * num_locals, s);
+  fp_offset = -1;
   /**********************************/
   /********* prologue end ***********/
   /**********************************/
@@ -1316,8 +1331,8 @@ void method_class::code(ostream& s) {
   /************ epilogue ************/
   /**********************************/
   emit_load(RA, 0, FP, s);
-  emit_load(SELF, formals->len() + 1, FP, s);
-  emit_load(FP, formals->len() + 2, FP, s);
+  emit_load(SELF, 1, FP, s);
+  emit_load(FP, 2, FP, s);
   //      ..locals[]..| $ra | | oso | ofp | ..args[].. 
   // <-- low --           Address               -- high -->             
   emit_addiu(SP, SP, 
@@ -1367,22 +1382,77 @@ static void code_dispatch(
   emit_label_def(nonzero_label, s);
 
   CgenNodeP cgnode;
-  if (type_name != NULL)
+  if (type_name != NULL) {
     cgnode = cgen_classtable->lookup(type_name);        // static dispatch
-  else
+    // actually not necessary
+    int *offset = cgnode->get_method_offset(name);      
+    emit_load_disptable(T1, type_name, s);
+    // 'so' already in ACC
+    emit_load(T1, *offset, T1, s); // load method
+    emit_jalr(T1, s);
+  } else {
     cgnode = cgen_classtable->lookup(expr->get_type()); // default dispatch
-
-  int *offset = cgnode->get_method_offset(name);
-  if (offset == NULL) {
-    cerr << "Fatal error: " << name << " undefined."
-      << "This should not happen as typechecker already check method "
-      << "is defined." << endl;
-    exit(0);
+    int *offset = cgnode->get_method_offset(name);
+    // 'so' already in ACC
+    emit_load(T1, DISPTABLE_OFFSET, ACC, s);   // load dispTab
+    emit_load(T1, *offset, T1, s); // load method
+    emit_jalr(T1, s);
   }
-  // 'so' already in ACC
-  emit_load(T1, DISPTABLE_OFFSET, ACC, s);   // load dispTab
-  emit_load(T1, *offset, T1, s); // load method
-  emit_jalr(T1, s);
+}
+
+static void code_arith(Expression e1, Expression e2, ArithType t, ostream& s) {
+  e1->code(s);
+  emit_fetch_int(ACC, ACC, s);  // push val field of e1
+  emit_push(ACC, s);
+  e2->code(s);
+  emit_jal_method(Object, ::copy, s); // copy() is method of tree_node
+  emit_fetch_int(T2, ACC, s);       // load val field of e2 
+  emit_pop(T1, s);                  // load val field of e1
+  switch(t) {
+    case Plus:
+      emit_add(T1, T1, T2, s);
+      break;
+    case Sub:
+      emit_sub(T1, T1, T2, s);
+      break;
+    case Mul:
+      emit_mul(T1, T1, T2, s);
+      break;
+    case Div:
+      emit_div(T1, T1, T2, s); // TODO catch div 0?
+      break;
+    default:
+      break;
+  }
+  emit_store_int(T1, ACC, s);
+}
+
+static void code_compare(
+    Expression e1, Expression e2, CompareType t, ostream& s) {
+  e1->code(s);
+  emit_push(ACC, s);
+  e2->code(s);
+  emit_move(T2, ACC, s);
+  emit_pop(T1, s);
+  emit_fetch_int(T1, T1, s); // load val_1 field
+  emit_fetch_int(T2, T2, s); // load val_2 field
+  int true_label = label_index++;
+  switch(t) {
+    case Less:
+      emit_blt(T1, T2, true_label, s);
+      break;
+    case LessEqual:
+      emit_bleq(T1, T2, true_label, s);
+      break;
+    default:
+      break;
+  }
+  emit_load_falsebool(ACC, s);
+  int end_label = label_index++;
+  emit_branch(end_label, s);
+  emit_label_def(true_label, s);
+  emit_load_truebool(ACC, s);
+  emit_label_def(end_label, s);
 }
 
 void assign_class::code(ostream &s) {
@@ -1404,6 +1474,7 @@ void assign_class::code(ostream &s) {
 
   emit_pop(T1, s);
   emit_store(T1, 0, ACC, s);
+  emit_load(ACC, 0, ACC, s);
 }
 
 void static_dispatch_class::code(ostream &s) {
@@ -1456,52 +1527,77 @@ void block_class::code(ostream &s) {
 
 void let_class::code(ostream &s) {
   if (cgen_debug) cout << pad(4) << "code let" << endl;
+  if (cgen_debug) s << "\t# let begin\n";
   // cur_env is set in cgen of method definition (method_class:code())
   cur_env->enterscope();
   cur_env->addid(identifier, new int(fp_offset));
-  init->code(s);
+
+  if (dynamic_cast<no_expr_class*>(init)) {
+    // let-no-init
+    if (type_decl == Int) {
+      IntEntryP int_default = inttable.lookup_string("0");
+      emit_load_int(ACC, int_default, s);
+    } else if (type_decl == Bool) {
+      emit_load_falsebool(ACC, s);
+    } else if (type_decl == Str) {
+      StringEntryP str_default = stringtable.lookup_string("");
+      emit_load_string(ACC, str_default, s);
+    } else {
+      emit_move(ACC, ZERO, s);
+    }
+  } else {
+    init->code(s);
+  }
   emit_store(ACC, fp_offset--, FP, s);
   body->code(s);
+  /* fp_offset++; // ? TODO */
   cur_env->exitscope();
+  if (cgen_debug) s << "\t# let end\n";
 }
 
 void plus_class::code(ostream &s) {
   if (cgen_debug) cout << pad(4) << "code plus" << endl;
-  e1->code(s);
-  emit_fetch_int(ACC, ACC, s);  // push val field of e1
-  emit_push(ACC, s);
-  e2->code(s);
-  emit_jal_method(Object, ::copy, s); // copy() is method of tree_node
-  emit_fetch_int(T2, ACC, s);       // load val field of e2 
-  emit_pop(T1, s);                  // load val field of e1
-  emit_add(T1, T1, T2, s);
-  emit_store_int(T1, ACC, s);
+  code_arith(e1, e2, Plus, s);
 }
 
 void sub_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code sub" << endl;
+  code_arith(e1, e2, Sub, s);
 }
 
 void mul_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code mul" << endl;
+  code_arith(e1, e2, Mul, s);
 }
 
 void divide_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code divide" << endl;
+  code_arith(e1, e2, Div, s);
 }
 
 void neg_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code neg" << endl;
+  e1->code(s);
+  emit_jal_method(Object, ::copy, s);
+  emit_fetch_int(T1, ACC, s);
+  emit_neg(T1, T1, s);
+  emit_store_int(T1, ACC, s);
 }
 
 void lt_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code less than" << endl;
+  code_compare(e1, e2, Less, s);
 }
 
 void eq_class::code(ostream &s) {
-  if (cgen_debug) cout << pad(4) << "code eq" << endl;
+  if (cgen_debug) cout << pad(4) << "code equal" << endl;
   e1->code(s);
   emit_push(ACC, s);
   e2->code(s);
   emit_move(T2, ACC, s);
   emit_pop(T1, s);
   int true_label = label_index++;
-  emit_beq(T1, T2, true_label, s); // beq t1, t2, _load_true_label
+  emit_beq(T1, T2, true_label, s); 
   emit_load_truebool(ACC, s);
   emit_load_falsebool(A1, s);
   emit_jal(EQUALITY_TEST, s);         // if true, true const in a0, 
@@ -1514,9 +1610,18 @@ void eq_class::code(ostream &s) {
 }
 
 void leq_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code less-equal" << endl;
+  code_compare(e1, e2, LessEqual, s);
 }
 
 void comp_class::code(ostream &s) {
+  if (cgen_debug) cout << pad(4) << "code comp(not)" << endl;
+  e1->code(s);
+  emit_jal_method(Object, ::copy, s);
+  emit_fetch_int(T1, ACC, s);
+  emit_neg(T1, T1, s);
+  emit_addiu(T1, T1, 1, s);
+  emit_store_int(T1, ACC, s);
 }
 
 void int_const_class::code(ostream& s)  
@@ -1554,7 +1659,7 @@ void new__class::code(ostream &s) {
     // init
     emit_pop(ACC, s);
     emit_load(ACC, 4, ACC, s); // class_obj[8*i+4] 
-    emit_jalr(T1, s);
+    emit_jalr(T1, s); // TODO? jalr or jal?
     return;
   }
   CgenNodeP cgnode = cgen_classtable->lookup(type_name);
@@ -1567,19 +1672,19 @@ void new__class::code(ostream &s) {
 void isvoid_class::code(ostream &s) {
   if (cgen_debug) cout << pad(4) << "code isvoid" << endl;
   e1->code(s);
-  emit_fetch_int(ACC, ACC, s);
-  int false_label = label_index++;
-  emit_beqz(ACC, false_label, s);
-  emit_load_truebool(ACC, s);
+  int true_label = label_index++;
+  emit_beqz(ACC, true_label, s);
+  emit_load_falsebool(ACC, s);
   int end_label = label_index++;
   emit_branch(end_label, s);
-  emit_label_def(false_label, s);
-  emit_load_falsebool(ACC, s);
+  emit_label_def(true_label, s);
+  emit_load_truebool(ACC, s);
   emit_label_def(end_label, s);
 }
 
 void no_expr_class::code(ostream &s) {
-}
+  cerr << "!!!!! Shout not call no_expr_class !!!!!!!" << endl;
+} 
 
 void object_class::code(ostream &s) {
   if (cgen_debug) cout << pad(4) << "code object" << endl;

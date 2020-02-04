@@ -10,6 +10,8 @@ enum Basicness     {Basic, NotBasic};
 
 #define TAGS 6
 #define PROLOG_SIZE  3
+enum ArithType {Plus, Sub, Mul, Div};
+enum CompareType {Less, LessEqual};
 
 class CgenClassTable;
 typedef CgenClassTable *CgenClassTableP;
@@ -124,9 +126,8 @@ public:
 struct DispTabEntry {
   Symbol cls;
   Symbol method;
-  EnvType *env;
   DispTabEntry(Symbol c, Symbol m) : 
-    cls(c), method(m), env(new EnvType()) {}
+    cls(c), method(m) {}
 };
 
 class BoolConst 

@@ -49,6 +49,7 @@ private:
    void code_select_gc();
    void code_constants();
 
+   void code_tag_graph();
    void code_name_table();
    void code_obj_table();
    void code_proto_obj();
@@ -72,6 +73,7 @@ public:
    CgenClassTable(Classes, ostream& str);
    void code();
    CgenNodeP root();
+   int num_tags() const;
 };
 
 

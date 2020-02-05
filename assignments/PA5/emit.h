@@ -36,9 +36,15 @@
 #define STRCONST_PREFIX      "str_const"
 #define BOOLCONST_PREFIX     "bool_const"
 
+#define TAGHASH_PROTOBJ      "tag_hash_proto"
+#define TAG_NODE             "_tag_node_"
+#define TAG_GRAPH_TABLE      "_tag_graph_table"
+
 // cool-runtime string constants
 #define EQUALITY_TEST        "equality_test"
 #define DISPATCH_ABORT       "_dispatch_abort"
+#define CASE_ABORT_NO_MATCH  "_case_abort"
+#define CASE_ABORT_ON_VOID   "_case_abort2"
 
 
 #define EMPTYSLOT            0
@@ -82,6 +88,7 @@
 //
 // Opcodes
 //
+#define JUMP  "\tj\t"
 #define JALR  "\tjalr\t"  
 #define JAL   "\tjal\t"                 
 #define RET   "\tjr\t"RA"\t"

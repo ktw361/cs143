@@ -56,7 +56,14 @@ class Main {
   }
   pool; -- 205, 206
 
-  my_void.f();  -- dispatch on void // TODO
+  case (my_a <- new A) of
+    o2 : A => my_io.outln(o2.f());  -- <- this
+    o2 : B => my_io.outln(o2.f());
+    o2 : C => my_io.outln(o2.h());
+    default : Object => my_io.out_string("default");
+  esac;
+
+  -- my_void.f();  -- disp on void
   my_io.out_string("end of main()\n");
   data;         -- to conform return type
 } -- sequence

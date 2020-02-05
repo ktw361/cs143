@@ -194,6 +194,53 @@ The configuration of $fp resembles $rbp in gcc calling convention.
   they have two different semantics: one is fetching value, one is assign to address
 - not & neg should call Object.copy
 
+TODO: doublely define branch?
+- Case expression implementation & design:
+  A tag hash table proto is emitted globally, the entry in it will be filled with
+  address(label) of each branch, otherwise is empty(0). The entry will be filled 
+  at runtime, as it ease our implementation, rather than generating hash table 
+  for each case and compile it into global .data segment.
+  Define tag hash table as:
+    hash[i] = label_Xi, if type T with tag i occurs one branch and its entry
+                        addresss is label_Xi.
+    hash[i] = 0,        otherwise.
+  which looks like:
+  tag_hash_proto:
+    .word   tag           # empty?
+    .word   size          # 3 + #tags
+    .word   dispTable     # empty
+    ...
+    .word   0             # if no corresponding branch at tag=0
+    ...
+    .word   label_Xindex  # if branch hash type with tag=index
+    ...
+
+  Say a Class with tag i is C_i, 
+  then a global graph table is built for every defined class:
+  _tag_graph_table:
+    .word   _tag_node_0   # for C_0, class with tag 0
+    .word   _tag_node_1   
+    ...
+    .word   _tag_node_i   # for C_i
+    ...
+
+  And each node is defined as:
+  _tag_node_i:
+    .word   `int`         # tag value of parent class
+    .word   _tag_node_p   # C_p is parent class of C_i
+
+  The runtime behavior of typcase is as follows:
+  1) Run expr, push initial tag
+  2) Copy tag_hash_proto, fill in non empty slots with branch label address,
+     Which slot to fill in is known at compile time, but the *filling* action
+     is conducted on runtime.
+  3) Load entry at initial tag in ACC, if non empty jump to (5) 
+  4) Load parent node address through global graph table,
+     test if parent tag has branch defined in tag hash.
+     If none, update current parent to hold parent's parent and loop (4), 
+     otherwise jump to (5)
+  5) end_loop: jump to label in ACC
+
 - code:
   equality_test() already done void check for us
 

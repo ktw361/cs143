@@ -1,3 +1,7 @@
 #!/bin/csh -f
 # script for run spim installed in mac system
-spim -exception_file ../../lib/trap.handler -file $*
+if ("$#" == 0) then
+  spim -exception_file ../../lib/trap.handler
+else
+  spim -exception_file ../../lib/trap.handler -file $*
+endif

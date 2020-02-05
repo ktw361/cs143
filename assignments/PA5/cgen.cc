@@ -37,7 +37,8 @@ extern int cgen_debug;
 static CgenClassTableP cgen_classtable; // staticDisp and new__class
 static CgenNodeP cur_cgnode;
 static EnvType *cur_env;
-static int fp_offset = 0; // in words
+static int fp_offset = 0; // In words.
+                          // In let/case points to next fresh unused space
 
 //
 // Three symbols from the semantic analyzer (semant.cc) are used.
@@ -374,7 +375,8 @@ static void emit_push(char *reg, ostream& str)
 //
 static void emit_pop(char *reg, ostream& str)
 {
-  emit_load(reg,1,SP,str);
+  if (reg != NULL)
+    emit_load(reg,1,SP,str);
   emit_addiu(SP,SP,4,str);
 }
 
@@ -408,6 +410,32 @@ static void emit_gc_check(char *source, ostream &s)
 {
   if (source != (char*)A1) emit_move(A1, source, s);
   s << JAL << "_gc_check" << endl;
+}
+
+// Utility functions for typcase
+static void emit_load_tag_hash_ref(char *dest_reg, ostream& s) {
+  emit_partial_load_address(dest_reg, s);
+  s << TAGHASH_PROTOBJ << endl;
+}
+
+static void emit_tag_hash_def(int num_tags, ostream& s) {
+  s << WORD << -1 << endl;                // eye cacher
+  s << TAGHASH_PROTOBJ  << LABEL;
+  s << WORD << -1 << endl;                // tag
+  s << WORD << (3 + num_tags) << endl;    // size
+  s << WORD << "Object_dispTab" << endl;  // disptable
+  // data field
+  for (int i = 0; i != num_tags; ++i)
+    s << WORD << EMPTYSLOT << endl;
+}
+
+static void emit_load_graph_table(char *dest_reg, ostream& s) {
+  emit_partial_load_address(dest_reg, s);
+  s << TAG_GRAPH_TABLE << endl;
+}
+
+static void emit_jump(char *dest, ostream& s) {
+  s << JUMP << dest << endl;
 }
 
 
@@ -673,6 +701,29 @@ void CgenClassTable::code_constants()
   stringtable.code_string_table(str,stringclasstag);
   inttable.code_string_table(str,intclasstag);
   code_bools(boolclasstag);
+}
+
+// 
+// Emit code for _tag_graph_table and _tag_node_*
+//
+void CgenClassTable::code_tag_graph() 
+{
+  emit_tag_hash_def(tags, str);
+  str << TAG_GRAPH_TABLE << LABEL;
+  for (int i = 0; i != tags; ++i)
+    str << WORD << TAG_NODE << i << endl;
+
+  int *parents = new int[tags];
+  for(List<CgenNode> *l = nds; l; l = l->tl()) {
+    CgenNodeP nd = l->hd();
+    parents[nd->tag()] = nd->get_parentnd()->tag();
+  }
+  for (int i = 0; i != tags; ++i) {
+    str << TAG_NODE << i << LABEL;
+    str << WORD << parents[i] << endl;
+    str << WORD << TAG_NODE << parents[i] << endl;
+  }
+  delete []parents;
 }
 
 // 
@@ -1023,6 +1074,9 @@ void CgenClassTable::code()
 //                   - class_nameTab
 //                   - dispatch tables
 //
+  // tag_graph_table
+  if (cgen_debug) cout << "coding tag graph" << endl;
+  code_tag_graph();
   // class_nameTab and class_objTab
   if (cgen_debug) cout << "coding name table" << endl;
   code_name_table();
@@ -1056,6 +1110,10 @@ CgenNodeP CgenClassTable::root()
    return probe(Object);
 }
 
+int CgenClassTable::num_tags() const {
+  return tags;
+}
+
 
 ///////////////////////////////////////////////////////////////////////
 //
@@ -1073,7 +1131,6 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
    attr_tab(new AttrTableT()),
    disp_offset(new OffsetT()),
    disp_tab(new TableT())
-   // TODO add new fields
 { 
    stringtable.add_string(name->get_string());          // Add class name to string table
 }
@@ -1115,13 +1172,13 @@ void CgenNode::code_attrs(ostream &str) const {
   // Handle basic protoObj
   if (name == Object) return;
   if (name == Int || name == Bool) {
-    str << WORD << "0" << endl;
+    str << WORD << EMPTYSLOT << endl;
     return;
   }
   if (name == Str) {
     IntEntryP int_default = inttable.lookup_string("0");
     str << WORD; int_default->code_ref(str); str << endl;
-    str << WORD << "0" << endl;
+    str << WORD << EMPTYSLOT << endl;
     return;
   }
 
@@ -1143,7 +1200,7 @@ void CgenNode::code_attrs(ostream &str) const {
         str << WORD; str_default->code_ref(str); str << endl;
       } else {
         // "void" for other classes
-        str << WORD << "0" << endl;
+        str << WORD << EMPTYSLOT << endl;
       }
     }
   }
@@ -1318,7 +1375,7 @@ void method_class::code(ostream& s) {
   }
   // calculate upper bound of sequential local variables
   /* int num_locals = expr->num_locals(); */ // TODO
-  int num_locals = 0;
+  int num_locals = 10;
   emit_addiu(SP, SP, - WORD_SIZE * num_locals, s);
   fp_offset = -1;
   /**********************************/
@@ -1377,8 +1434,9 @@ static void code_dispatch(
       stringtable.lookup_string(
         cur_cgnode->get_filename()->get_string()), 
       s);
-  emit_load_imm(T1, cur_cgnode->get_line_number(), s); // TODO check
+  emit_load_imm(T1, cur_cgnode->get_line_number(), s);
   emit_jal(DISPATCH_ABORT, s);
+  if (cgen_debug) s << "# dispatch normal:" << endl;
   emit_label_def(nonzero_label, s);
 
   CgenNodeP cgnode;
@@ -1478,7 +1536,6 @@ void assign_class::code(ostream &s) {
 }
 
 void static_dispatch_class::code(ostream &s) {
-  // TODO if dispatch to SELFTYPE?
   if (cgen_debug) cout << pad(4) << "code static dispatch" << endl;
   code_dispatch(expr, type_name, name, actual, s);
 }
@@ -1517,6 +1574,120 @@ void loop_class::code(ostream &s) {
 }
 
 void typcase_class::code(ostream &s) {
+  // case branch will not has SELF_TYPE by typecheker
+  if (cgen_debug) cout << pad(4) << "code typcase" << endl;
+  if (cgen_debug) s << "\t# typcase begin" << endl;
+  expr->code(s);
+  emit_push(ACC, s);                      // push object
+  int case_non_void = label_index++;
+  emit_bne(ACC, ZERO, case_non_void, s);
+  emit_load_string(
+      ACC, 
+      stringtable.lookup_string(
+        cur_cgnode->get_filename()->get_string()), 
+      s);
+  emit_load_imm(T1, cur_cgnode->get_line_number(), s);
+  emit_jal(CASE_ABORT_ON_VOID, s);
+
+  if (cgen_debug) s << "# non_void: " << endl;
+  emit_label_def(case_non_void, s);
+  emit_store(ACC, fp_offset, FP, s);
+  emit_load(ACC, TAG_OFFSET, ACC, s);   
+  emit_push(ACC, s);                      // push expr tag
+  
+  // Copy hash_table
+  // we should have generate tag hash in .data segment, for every typcase, 
+  // but too clumsy
+  emit_load_tag_hash_ref(ACC, s);
+  emit_jal_method(Object, ::copy, s);
+  emit_addiu(ACC, ACC, WORD_SIZE * DEFAULT_OBJFIELDS, s); // start of array
+  emit_push(ACC, s);                     // push tag hash table
+  int loop_init = label_index++;
+  emit_branch(loop_init, s);
+  
+  // Determine which field should store which label 
+  // Emit code for each branch
+  int end_case = label_index++;
+  int case_label;
+  int *hash_arr = new int[cgen_classtable->num_tags()];
+  LOOP_LIST_NODE(i, cases)
+  {
+    branch_class *branch = dynamic_cast<branch_class*>(cases->nth(i));
+    if (branch == NULL) continue;
+    CgenNodeP nd  = cgen_classtable->lookup(branch->type_decl);
+    int branch_tag = nd->tag();
+    case_label = label_index++;
+    hash_arr[branch_tag] = case_label;
+    if (cgen_debug) s << "# branch " << branch->type_decl << endl;
+    emit_label_def(case_label, s);
+    cur_env->enterscope();
+    // all different name reference to same address in stack
+    cur_env->addid(branch->name, new int(fp_offset--));  
+    branch->expr->code(s);
+    fp_offset++;
+    cur_env->exitscope();
+    emit_branch(end_case, s);
+  }
+  if (cgen_debug) s << "# loop_init:" << endl;
+  emit_label_def(loop_init, s);
+  emit_pop(ACC, s);                     // pop tag hash table
+  for (int i = 0; i != cgen_classtable->num_tags(); ++i) {
+    if (hash_arr[i] != 0) {
+      emit_partial_load_address(T1, s); 
+      emit_label_ref(hash_arr[i], s); s << endl;
+      emit_store(T1, i, ACC, s);
+    }
+  }
+  emit_move(T3, ACC, s);  // tag hash in T3
+
+  int loop_label = label_index++;
+  int end_loop = label_index++;
+  int case_active = label_index++;      // active = not no_match
+  // Now fetch tag from current class and test its value in tag hash,
+  // if empty, consult global graph node table,
+  // recursively go upward hierarchy tree
+  emit_pop(ACC, s);                     // pop case expr tag
+  emit_sll(ACC, ACC, 2, s);
+  emit_move(T1, ACC, s);                // cache offset
+  emit_add(ACC, ACC, T3, s);
+  emit_load(ACC, 0, ACC, s);            // load hash table slot
+  emit_bne(ACC, ZERO, end_loop, s);
+  emit_load_graph_table(T2, s);         // otherwise, load graph table in T2
+  emit_add(ACC, T1, T2, s);             
+  emit_load(ACC, 0, ACC, s);            // addresss of parent tag node
+
+  // on entry, ACC hold address of parent class graph_node, 
+  // and is about to go up one level of tree
+  if (cgen_debug) s << "# loop_label:" << endl;
+  emit_label_def(loop_label, s);
+  emit_move(T1, ACC, s);                // cache parent tag address
+  emit_load(ACC, 0, T1, s);             // load parent tag value
+  emit_sll(ACC, ACC, 2, s);             // *4
+  emit_add(ACC, ACC, T3, s);
+  emit_load(ACC, 0, ACC, s);
+  emit_bne(ACC, ZERO, end_loop, s);   
+  // otherwise, reload parent tag
+  // if parent is already root(Object)                                      
+  // case abort on no match
+  emit_load(ACC, 0, T1, s);           
+  emit_bne(ACC, ZERO, case_active, s);
+  emit_pop(ACC, s);                     // pop case object
+  emit_jal(CASE_ABORT_NO_MATCH, s);
+
+  if (cgen_debug) s << "# case activate (no unmatch):" << endl;
+  emit_label_def(case_active, s);
+  emit_load(ACC, 1, T1, s);
+  emit_branch(loop_label, s);
+
+  if (cgen_debug) s << "# end_loop:" << endl;
+  emit_label_def(end_loop, s);
+  emit_pop(NULL, s);                    // pop case object  
+  emit_jump(ACC, s);
+
+  if (cgen_debug) s << "#end case:" << endl;
+  emit_label_def(end_case, s);
+  delete []hash_arr;
+  if (cgen_debug) s << "\t# typcase end" << endl;
 }
 
 void block_class::code(ostream &s) {
@@ -1550,7 +1721,7 @@ void let_class::code(ostream &s) {
   }
   emit_store(ACC, fp_offset--, FP, s);
   body->code(s);
-  /* fp_offset++; // ? TODO */
+  fp_offset++; // ? TODO */
   cur_env->exitscope();
   if (cgen_debug) s << "\t# let end\n";
 }
@@ -1659,7 +1830,7 @@ void new__class::code(ostream &s) {
     // init
     emit_pop(ACC, s);
     emit_load(ACC, 4, ACC, s); // class_obj[8*i+4] 
-    emit_jalr(T1, s); // TODO? jalr or jal?
+    emit_jalr(T1, s); 
     return;
   }
   CgenNodeP cgnode = cgen_classtable->lookup(type_name);

@@ -555,7 +555,13 @@ Symbol ClassTable::typecheck_case(Expression expr) {
     for (int i = cases->first(); cases->more(i); i = cases->next(i)) {
         Case c = cases->nth(i);
         obj_env.enterscope();
-        if (!ig_nodes.count(c->get_type())) {
+        if (c->get_type() == SELF_TYPE) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "Identifier " << c->get_name()
+                << " declared with type SELF_TYPE in case branch." << endl;
+            return Object;
+        } else if (!ig_nodes.count(c->get_type())) {
             semant_error();
             dump_fname_lineno(cerr, cls_env)
                 << "Class " << c->get_type()

@@ -1448,8 +1448,11 @@ static void code_dispatch(
     // 'so' already in ACC
     emit_load(T1, *offset, T1, s); // load method
     emit_jalr(T1, s);
-  } else {
-    cgnode = cgen_classtable->lookup(expr->get_type()); // default dispatch
+  } else {                                              // default dispatch
+    if (expr->get_type() == SELF_TYPE)
+      cgnode = cur_cgnode;
+    else
+      cgnode = cgen_classtable->lookup(expr->get_type()); 
     int *offset = cgnode->get_method_offset(name);
     // 'so' already in ACC
     emit_load(T1, DISPTABLE_OFFSET, ACC, s);   // load dispTab

@@ -773,7 +773,7 @@ void CgenClassTable::code_proto_obj()
       << WORD << nd->tag() << endl
       << WORD << nd->size() << endl
       << WORD; emit_disptable_ref(nd->get_name(), str); str << endl;
-    nd->code_attrs(str);
+    nd->code_protobj_attrs(str);
 
     for (List<CgenNode> *l = nd->get_children(); l; l = l->tl())
       que.push_back(l->hd());
@@ -1168,7 +1168,7 @@ void CgenNode::build_attrtab() {
 }
 
 // Emit all attribute fields during *_protoObj definition
-void CgenNode::code_attrs(ostream &str) const {
+void CgenNode::code_protobj_attrs(ostream &str) const {
   // Handle basic protoObj
   if (name == Object) return;
   if (name == Int || name == Bool) {
@@ -1183,7 +1183,7 @@ void CgenNode::code_attrs(ostream &str) const {
   }
 
   // Handle non-basic protObj
-  get_parentnd()->code_attrs(str);
+  get_parentnd()->code_protobj_attrs(str);
   Features feats = features;
   LOOP_LIST_NODE(i, feats)
   {
@@ -1277,7 +1277,7 @@ void CgenNode::code_disptab(ostream &str) const {
 
 // Utility function for code_init().
 // Emit code of attribute initialization in current class 
-void CgenNode::code_init_attr(ostream& s) const {
+void CgenNode::code_init_attr(ostream& s) {
   if (name == Object ||
       name == Int || 
       name == Bool ||
@@ -1299,7 +1299,8 @@ void CgenNode::code_init_attr(ostream& s) const {
 // Emit *_init label definition
 // On entry, 'so' object in ACC
 // Returns value is also 'so'
-void CgenNode::code_init(ostream& s) const {
+void CgenNode::code_init(ostream& s) {
+  cur_cgnode = this;
   emit_init_ref(name, s);
   s << LABEL;
   emit_push(FP, s);           // ofp
@@ -1524,13 +1525,15 @@ void assign_class::code(ostream &s) {
 
   // args and local vars
   int *offset = cur_env->lookup(name);
-  if (offset != NULL) {
-    if (cgen_debug) cout << pad(6) << "found arg/local" << endl;
-    emit_addiu(ACC, FP, WORD_SIZE * (*offset), s);
-  } else {
-    // resort to attribute table
-    if (cgen_debug) cout << pad(6) << "found attr" << endl;
-    emit_addiu(ACC, SELF, WORD_SIZE *cur_cgnode->get_attr_offset(name), s);
+  if (cur_env != NULL ) {            // cur_env is NULL when attr init
+    if (offset != NULL) {
+      if (cgen_debug) cout << pad(6) << "found arg/local" << endl;
+      emit_addiu(ACC, FP, WORD_SIZE * (*offset), s);
+    } else {
+      // resort to attribute table
+      if (cgen_debug) cout << pad(6) << "found attr" << endl;
+      emit_addiu(ACC, SELF, WORD_SIZE *cur_cgnode->get_attr_offset(name), s);
+    }
   }
 
   emit_pop(T1, s);
@@ -1867,11 +1870,13 @@ void object_class::code(ostream &s) {
     return;
   }
   // args and local vars
-  int *offset = cur_env->lookup(name);
-  if (offset != NULL) {
-    if (cgen_debug) cout << pad(6) << "found arg/local" << endl;
-    emit_load(ACC, *offset, FP, s);
-    return;
+  if (cur_env != NULL ) {            // cur_env is NULL when attr init
+    int *offset = cur_env->lookup(name);
+    if (offset != NULL) {
+      if (cgen_debug) cout << pad(6) << "found arg/local" << endl;
+      emit_load(ACC, *offset, FP, s);
+      return;
+    }
   }
   // resort to attribute table
   if (cgen_debug) cout << pad(6) << "found attr" << endl;

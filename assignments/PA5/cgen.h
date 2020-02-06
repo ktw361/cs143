@@ -113,11 +113,11 @@ public:
    int num_methods() const { return _num_methods; }
    int num_attrs() const { return _num_attrs; }
    void build_attrtab();
-   void code_attrs(ostream&) const;
+   void code_protobj_attrs(ostream&) const;
    void build_disptab(ostream&);
    void code_disptab(ostream&) const;
-   void code_init_attr(ostream&) const;
-   void code_init(ostream&) const;
+   void code_init_attr(ostream&);
+   void code_init(ostream&);
    void code_method_def(ostream&);
 
    int* get_method_offset(Symbol) const;

@@ -1832,10 +1832,10 @@ void new__class::code(ostream &s) {
     emit_push(ACC, s);          // caching (class_objTab+8*i)
     emit_load(ACC, 0, ACC, s);  // class_objTab[8*i]
     emit_jal_method(Object, ::copy, s);
-    // init
-    emit_pop(ACC, s);
-    emit_load(ACC, 1, ACC, s); // class_obj[8*i+4] 
-    emit_jalr(ACC, s); 
+    // init, note ACC is for return, thus we use T1
+    emit_pop(T1, s);
+    emit_load(T1, 1, T1, s); // class_obj[8*i+4] 
+    emit_jalr(T1, s); 
     return;
   }
   CgenNodeP cgnode = cgen_classtable->lookup(type_name);

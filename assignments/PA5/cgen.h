@@ -109,9 +109,8 @@ public:
 
    void set_tag(int tag) { _tag = tag; }
    int tag() const { return _tag; }
-   int size() const { return DEFAULT_OBJFIELDS + _num_attrs; }
+   int size() const { return _num_attrs; }
    int num_methods() const { return _num_methods; }
-   int num_attrs() const { return _num_attrs; }
    void build_attrtab();
    void code_protobj_attrs(ostream&) const;
    void build_disptab(ostream&);

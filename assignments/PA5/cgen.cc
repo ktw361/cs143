@@ -1141,7 +1141,7 @@ void CgenNode::build_attrtab() {
   Features feats = features;
 
   if (name == Object) {
-    _num_attrs = 0;
+    _num_attrs = DEFAULT_OBJFIELDS;
     // dfs step
     for (List<CgenNode> *l = children; l; l = l->tl())
       l->hd()->build_attrtab();
@@ -1149,7 +1149,7 @@ void CgenNode::build_attrtab() {
   }
 
   AttrTableT *parent_attrs = parentnd->attr_tab;
-  _num_attrs = parentnd->num_attrs();
+  _num_attrs = parentnd->size();
 
   LOOP_LIST_NODE(i, feats)
   {

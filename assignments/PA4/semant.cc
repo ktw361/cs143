@@ -774,8 +774,15 @@ void ClassTable::typecheck_method(Feature feat) {
     }
 }
 
-void ClassTable::typecheck_attr(Feature feat) {
-    if (semant_debug) cout << "Attr: " << feat->get_name() << endl;
+// One attr initialization expression may reference other attr,
+// we need two passes, in first pass we only add id.
+void ClassTable::typecheck_attr(Feature feat, bool addid_only) {
+    if (semant_debug) {
+        if (addid_only)
+            cout << "Attr addid " << feat->get_name() << endl;
+        else
+            cout << "Attr typecheck init " << feat->get_name() << endl;
+    }
     Symbol name = feat->get_name();
     Symbol type_decl = feat->get_type();
     Expression init = feat->get_expr();
@@ -786,8 +793,8 @@ void ClassTable::typecheck_attr(Feature feat) {
             << "'self' cannot be the name of an attribute." << endl;
         return;
     }
-    // check overrite parent attribute
-    if (obj_env.lookup(name)) {
+    // check overrite parent attribute when adding id
+    if (obj_env.lookup(name) && addid_only == true) {
         semant_error();
         dump_fname_lineno(cerr, cls_env)
             << " Attribute " << name 
@@ -801,27 +808,29 @@ void ClassTable::typecheck_attr(Feature feat) {
             << "Class " << type_decl
             << " of attribute " << name
             << " is undefined." << endl;
-        obj_env.addid(name, new Symbol(Object));
-    } else {
+        return;
+    } 
+    if (addid_only) {
         obj_env.addid(name, new Symbol(type_decl));
-        if (dynamic_cast<no_expr_class*>(init)) {
-            init->set_type(No_type);
-        } else {
-            // handle attr init expressions
-            obj_env.enterscope();
-            Symbol T0 = type_decl;
-            obj_env.addid(self, new Symbol(SELF_TYPE));
-            Symbol T1 = typecheck_expr(init);
-            if (!conform(T1, T0)) {
-                semant_error();
-                dump_fname_lineno(cerr, cls_env)
-                    << "Inferred type " << T1
-                    << " of initialization of attribute " << name
-                    << " does not conform to declared type " 
-                    << T0 << "." << endl;
-            }
-            obj_env.exitscope();
+        return;
+    }
+    if (dynamic_cast<no_expr_class*>(init)) {
+        init->set_type(No_type);
+    } else {
+        // handle attr init expressions
+        obj_env.enterscope();
+        Symbol T0 = type_decl;
+        obj_env.addid(self, new Symbol(SELF_TYPE));
+        Symbol T1 = typecheck_expr(init);
+        if (!conform(T1, T0)) {
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "Inferred type " << T1
+                << " of initialization of attribute " << name
+                << " does not conform to declared type " 
+                << T0 << "." << endl;
         }
+        obj_env.exitscope();
     }
 }
 
@@ -1007,11 +1016,19 @@ void ClassTable::_decl_attrs(Class_ cls) {
 
     if (semant_debug)  cout << "Attr adding: " << cls->get_name() << endl;
     Features features = cls->get_features();
+    // first pass: addid
     for (int i = features->first(); features->more(i); i = features->next(i)) {
         Feature f = features->nth(i);
         if (f->is_method()) continue;
         if (is_prim_type(cls_env->get_name())) continue;
-        typecheck_attr(f);
+        typecheck_attr(f, true);
+    }
+    // second pass: addid
+    for (int i = features->first(); features->more(i); i = features->next(i)) {
+        Feature f = features->nth(i);
+        if (f->is_method()) continue;
+        if (is_prim_type(cls_env->get_name())) continue;
+        typecheck_attr(f, false);
     }
 
     // Then, dfs step, add sub class attrs / attr-expr

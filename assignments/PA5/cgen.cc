@@ -1141,7 +1141,7 @@ void CgenNode::build_attrtab() {
   Features feats = features;
 
   if (name == Object) {
-    _num_attrs = DEFAULT_OBJFIELDS;
+    _num_attrs = 0;
     // dfs step
     for (List<CgenNode> *l = children; l; l = l->tl())
       l->hd()->build_attrtab();
@@ -1826,8 +1826,7 @@ void new__class::code(ostream &s) {
   if (type_name == SELF_TYPE) {
     // copy protObj
     emit_load(T1, TAG_OFFSET, SELF, s); // i = class_tag
-    emit_load_imm(T2, 2, s);
-    emit_mul(T1, T1, T2, s);
+    emit_sll(T1, T1, 3, s);             // 8*i
     emit_load_address(ACC, CLASSOBJTAB, s);
     emit_add(ACC, ACC, T1, s);  
     emit_push(ACC, s);          // caching (class_objTab+8*i)
@@ -1835,8 +1834,8 @@ void new__class::code(ostream &s) {
     emit_jal_method(Object, ::copy, s);
     // init
     emit_pop(ACC, s);
-    emit_load(ACC, 4, ACC, s); // class_obj[8*i+4] 
-    emit_jalr(T1, s); 
+    emit_load(ACC, 1, ACC, s); // class_obj[8*i+4] 
+    emit_jalr(ACC, s); 
     return;
   }
   CgenNodeP cgnode = cgen_classtable->lookup(type_name);

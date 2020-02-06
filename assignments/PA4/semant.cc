@@ -408,6 +408,12 @@ Symbol ClassTable::typecheck_static_dispatch(Expression expr) {
     static_dispatch_class *e = dynamic_cast<static_dispatch_class*>(expr);
     Expression e0 = e->get_expr();
     Symbol T = e->get_type();       // target typename
+    if (T == SELF_TYPE) {
+        semant_error();
+        dump_fname_lineno(cerr, cls_env)
+            << "Static dispatch to SELF_TYPE." << endl; 
+        return Object;
+    }
     Symbol name = e->get_name();    // name f
     Expressions actual = e->get_actual();
     Symbol T0 = typecheck_expr(e0);

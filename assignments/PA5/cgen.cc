@@ -1334,12 +1334,15 @@ int* CgenNode::get_method_offset(Symbol id) const {
   int *ret = NULL;
   ret = disp_offset->probe(id);
   if (ret != NULL) return ret;
-  if (name == Object) return ret; // return NULL
+  if (name == Object) return ret; // return NULL // TODO unused?
   return get_parentnd()->get_method_offset(id);
 }
 
 int CgenNode::get_attr_offset(Symbol sym) const {
-  return *attr_tab->lookup(sym);
+  int *ret = NULL;
+  ret = attr_tab->probe(sym);
+  if (ret != NULL) return *ret;
+  return get_parentnd()->get_attr_offset(sym);
 }
 
 // Retrive dispatch table entry from offset O_f
@@ -1518,7 +1521,7 @@ static void code_compare(
 }
 
 void assign_class::code(ostream &s) {
-  if (cgen_debug) cout << pad(4) << "code assign" << endl;
+  if (cgen_debug) cout << pad(4) << "code assign " << name << endl;
   // type check guarantees that 'self' will not be assigned
   expr->code(s);
   emit_push(ACC, s);
@@ -1702,13 +1705,13 @@ void block_class::code(ostream &s) {
     body->nth(i)->code(s);
 }
 
+// By cool operational semantic, init expression is evaluated
+// before the definition of identifier.
 void let_class::code(ostream &s) {
   if (cgen_debug) cout << pad(4) << "code let" << endl;
   if (cgen_debug) s << "\t# let begin\n";
   // cur_env is set in cgen of method definition (method_class:code())
   cur_env->enterscope();
-  cur_env->addid(identifier, new int(fp_offset));
-
   if (dynamic_cast<no_expr_class*>(init)) {
     // let-no-init
     if (type_decl == Int) {
@@ -1725,6 +1728,7 @@ void let_class::code(ostream &s) {
   } else {
     init->code(s);
   }
+  cur_env->addid(identifier, new int(fp_offset));
   emit_store(ACC, fp_offset--, FP, s);
   body->code(s);
   fp_offset++; // ? TODO */
@@ -1863,7 +1867,7 @@ void no_expr_class::code(ostream &s) {
 } 
 
 void object_class::code(ostream &s) {
-  if (cgen_debug) cout << pad(4) << "code object" << endl;
+  if (cgen_debug) cout << pad(4) << "code object " << name << endl;
   if (name == self) {
     emit_move(ACC, SELF, s);
     return;

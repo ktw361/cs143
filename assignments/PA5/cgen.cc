@@ -714,7 +714,7 @@ void CgenClassTable::code_tag_graph()
   for (int i = 0; i != tags; ++i)
     str << WORD << TAG_NODE << i << endl;
 
-  int *parents = new int[tags];
+  int *parents = new int[tags]();
   for(List<CgenNode> *l = nds; l; l = l->tl()) {
     CgenNodeP nd = l->hd();
     parents[nd->tag()] = nd->get_parentnd()->tag();
@@ -1623,7 +1623,7 @@ void typcase_class::code(ostream &s) {
   // Emit code for each branch
   int end_case = label_index++;
   int case_label;
-  int *hash_arr = new int[cgen_classtable->num_tags()];
+  int *hash_arr = new int[cgen_classtable->num_tags()]();
   LOOP_LIST_NODE(i, cases)
   {
     branch_class *branch = dynamic_cast<branch_class*>(cases->nth(i));

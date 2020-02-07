@@ -12,7 +12,6 @@ my $just_unpack;
 my $just_run;
 my $verbose;
 my $skip_check;
-my $correction = "ls | grep .out | xargs sed  -i \'s/\\\/usr\\\/class\\\/cs143\\\/cool/\\.\\./g\'";
 
 sub usage {
     print "Usage: $0 [options]\n";
@@ -79,8 +78,6 @@ unless($just_run) {
     }
     $fh->close;
 }
-
-system($correction);
 
 unless($just_unpack) {
     print "Running command: $grading_cmd\n"

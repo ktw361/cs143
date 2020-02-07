@@ -33,12 +33,13 @@
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
 
-// TODO check necessary
+// cur_cgnode, cur_env and fp_offset should be set beforing 
+// i) code attr init  ii) code method body
+// fp_offset in let/case points to next fresh unused space
 static CgenClassTableP cgen_classtable; // staticDisp and new__class
 static CgenNodeP cur_cgnode;
 static EnvType *cur_env;
 static int fp_offset = 0; // In words.
-                          // In let/case points to next fresh unused space
 
 //
 // Three symbols from the semantic analyzer (semant.cc) are used.
@@ -1338,7 +1339,7 @@ int* CgenNode::get_method_offset(Symbol id) const {
   int *ret = NULL;
   ret = disp_offset->probe(id);
   if (ret != NULL) return ret;
-  if (name == Object) return ret; // return NULL // TODO unused?
+  if (name == Object) return ret; // necessary when building dispTab
   return get_parentnd()->get_method_offset(id);
 }
 
@@ -1735,7 +1736,7 @@ void let_class::code(ostream &s) {
   cur_env->addid(identifier, new int(fp_offset));
   emit_store(ACC, fp_offset--, FP, s);
   body->code(s);
-  fp_offset++; // ? TODO */
+  fp_offset++; 
   cur_env->exitscope();
   if (cgen_debug) s << "\t# let end\n";
 }

@@ -1301,6 +1301,8 @@ void CgenNode::code_init_attr(ostream& s) {
 // Returns value is also 'so'
 void CgenNode::code_init(ostream& s) {
   cur_cgnode = this;
+  cur_env = new EnvType();
+  cur_env->enterscope();
   emit_init_ref(name, s);
   s << LABEL;
   emit_push(FP, s);           // ofp
@@ -1310,6 +1312,7 @@ void CgenNode::code_init(ostream& s) {
   emit_addiu(FP, SP, WORD_SIZE, s); // get current fp
   if (name != Object)
     emit_jal_init_ref(parentnd->get_name(), s);
+  fp_offset = -1;
   code_init_attr(s);
   emit_move(ACC, SELF, s);    // returns 'so'
   emit_load(RA, 0, FP, s);    // restore ra
@@ -1317,6 +1320,7 @@ void CgenNode::code_init(ostream& s) {
   emit_load(FP, 2, FP, s);    // restore ofp
   emit_addiu(SP, SP, WORD_SIZE * PROLOG_SIZE, s);
   emit_return(s);
+  cur_env->exitscope();
 }
 
 // Emit method definition for all methods

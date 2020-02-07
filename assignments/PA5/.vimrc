@@ -1,6 +1,9 @@
 set ts=2
 set shiftwidth=2
 
+autocmd BufRead,BufNewFile *.cl set cms=--\ %s
+autocmd BufRead,BufNewFile *.s set cms=#\ %s
+
 set tags+=../../include/PA5/.tags
 set path+=../../include/PA5/**
 

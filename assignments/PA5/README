@@ -155,6 +155,7 @@ My score:
   46 -> 49 -> 43(SegFault) 
   -> 53(new SELF_TYPE) ->55 (fix parent attr; let-init-first)
   -> 57(set cur_env & fp_offset at the begining of code attr init)
+  -> 63(trap.handler path)
 
 Mynotes:
 -

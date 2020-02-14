@@ -100,6 +100,7 @@ void dump_with_types(ostream& ,int);
 Symbol type;                                 \
 Symbol get_type() { return type; }           \
 Expression set_type(Symbol s) { type = s; return this; } \
+virtual int num_locals() = 0; \
 virtual void code(ostream&) = 0; \
 virtual void dump_with_types(ostream&,int) = 0;  \
 void dump_type(ostream&, int);               \
@@ -107,6 +108,7 @@ Expression_class() { type = (Symbol) NULL; }
 
 #define Expression_SHARED_EXTRAS           \
 void code(ostream&); 			   \
+int num_locals();            \
 void dump_with_types(ostream&,int); 
 
 

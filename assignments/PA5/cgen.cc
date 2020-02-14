@@ -1383,8 +1383,7 @@ void method_class::code(ostream& s) {
     cur_env->addid(name, new int(--fp_offset));
   }
   // calculate upper bound of sequential local variables
-  /* int num_locals = expr->num_locals(); */ // TODO
-  int num_locals = 10;
+  int num_locals = expr->num_locals();
   emit_addiu(SP, SP, - WORD_SIZE * num_locals, s);
   fp_offset = -1;
   /**********************************/
@@ -1529,24 +1528,21 @@ void assign_class::code(ostream &s) {
   if (cgen_debug) cout << pad(4) << "code assign " << name << endl;
   // type check guarantees that 'self' will not be assigned
   expr->code(s);
-  emit_push(ACC, s);
 
   // args and local vars
   int *offset = cur_env->lookup(name);
   if (cur_env != NULL ) {            // cur_env is NULL when attr init
     if (offset != NULL) {
       if (cgen_debug) cout << pad(6) << "found arg/local" << endl;
-      emit_addiu(ACC, FP, WORD_SIZE * (*offset), s);
+      emit_addiu(T1, FP, WORD_SIZE * (*offset), s);
+      emit_store(ACC, 0, T1, s);
     } else {
       // resort to attribute table
       if (cgen_debug) cout << pad(6) << "found attr" << endl;
-      emit_addiu(ACC, SELF, WORD_SIZE *cur_cgnode->get_attr_offset(name), s);
+      emit_addiu(T1, SELF, WORD_SIZE *cur_cgnode->get_attr_offset(name), s);
+      emit_store(ACC, 0, T1, s);
     }
   }
-
-  emit_pop(T1, s);
-  emit_store(T1, 0, ACC, s);
-  emit_load(ACC, 0, ACC, s);
 }
 
 void static_dispatch_class::code(ostream &s) {
@@ -1710,8 +1706,8 @@ void block_class::code(ostream &s) {
     body->nth(i)->code(s);
 }
 
-// By cool operational semantic, init expression is evaluated
-// before the definition of identifier.
+// By cool operational semantic, init expression is evaluated BEFORE 
+// the definition of identifier.
 void let_class::code(ostream &s) {
   if (cgen_debug) cout << pad(4) << "code let" << endl;
   if (cgen_debug) s << "\t# let begin\n";

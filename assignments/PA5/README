@@ -151,6 +151,10 @@ Instructions
 
 Write-up for PA5
 ----------------
+Added File:
+  cool-tree-num_locals.cc: Calculates the allocation size of local variables 
+    in stack when entering a new activation record.
+
 My score:
   46 -> 49 -> 43(SegFault) 
   -> 53(new SELF_TYPE) ->55 (fix parent attr; let-init-first)
@@ -166,9 +170,6 @@ Mynotes:
 - Dispatch table:
   OffsetT stores mapping from method name to 'dispTab offset' O_f: <f, O_f>
   TableT stores mapping from offset to mips code, <O_f, Code>
-
-TODO (PA4, semant attr!!!)
-TODO (PA4, main no arg)
 
 The configuration of $fp resembles $rbp in gcc calling convention.
 
@@ -245,3 +246,30 @@ The configuration of $fp resembles $rbp in gcc calling convention.
   equality_test() already done void check for us
 
 - Int uses val=char* ? Yes, it's string and handled by spim
+
+- Method calling convention:
+  Assume we call `func` with 3 parameters: func(x, y, z)
+  The AR looks like:
+
+                            x
+                      -------------
+  Caller saved              y
+                      -------------
+                            z
+                  ======================
+                           ofp
+                      -------------
+                           oso
+  Callee saved        -------------
+                           ra             <= FP
+                      -------------
+         ->               local_1
+         |            -------------
+         |                local_2
+         |            -------------
+       # locals            ...
+         |            -------------
+         ->              local_n
+                      -------------
+                                          <= SP
+                      -------------

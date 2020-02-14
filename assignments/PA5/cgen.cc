@@ -1488,7 +1488,7 @@ static void code_arith(Expression e1, Expression e2, ArithType t, ostream& s) {
       emit_mul(T1, T1, T2, s);
       break;
     case Div:
-      emit_div(T1, T1, T2, s); // TODO catch div 0?
+      emit_div(T1, T1, T2, s); // let SPIM catch div 0(?)
       break;
     default:
       break;

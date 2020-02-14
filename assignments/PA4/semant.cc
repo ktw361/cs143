@@ -760,6 +760,15 @@ void ClassTable::typecheck_method(Feature feat) {
         // New method
         method_env[key] = new MtdValType();
         int num_formals = _add_formal_signatures(feat);
+        if (num_formals != 0 
+                && cls_env->get_name() == Main && name == main_meth) {
+            // Special: Main.main() takes no args
+            semant_error();
+            dump_fname_lineno(cerr, cls_env)
+                << "'main' method in Main class should have no arguments." 
+                << endl;
+        }
+
         MtdValType &signatures = *method_env[key];
         // check method return type defined
         Symbol return_type =feat->get_type();
